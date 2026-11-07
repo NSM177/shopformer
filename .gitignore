@@ -1,0 +1,37 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+src/*.egg-info/
+
+# Dataset, clips, and runtime databases
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Model weights & checkpoints
+*.pt
+*.pth
+*.onnx
+
+# Environment variables & secrets
+.env
+.env.*
+
+# Third-party cloned repositories
+third_party/
+

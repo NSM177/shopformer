@@ -1,0 +1,87 @@
+paths:
+  data_dir: "data/PoseLift"
+  pose_train_dir: "data/PoseLift/pose/train"
+  pose_test_dir: "data/PoseLift/pose/test"
+  gt_mask_dir: "data/PoseLift/gt/test_frame_mask"
+  checkpoints_dir: "checkpoints"
+  gcae_ckpt: "checkpoints/gcae_best.pt"
+  shopformer_ckpt: "checkpoints/shopformer_best.pt"
+  threshold_file: "checkpoints/threshold.json"
+  clips_dir: "data/clips"
+  db_path: "data/events.db"
+
+video:
+  target_fps: 15
+  vid_res: [1920, 1080]
+  swap_yx_from_poselift_json: true
+
+pose_track:
+  yolo_model: "yolov8n-pose.pt"
+  tracker_config: "bytetrack.yaml"
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  device: "cuda:0"
+
+preprocess:
+  window_size: 12
+  window_stride_train: 6
+  window_stride_eval: 1
+  max_missing_frames: 2
+  smoothing_window: 8
+  num_keypoints_coco17: 17
+  num_keypoints_coco18: 18
+  symm_range: false
+
+model:
+  in_channels: 2
+  h_dim: 2
+  num_tokens: 2
+  token_dim: 144
+  transformer_heads: 12
+  transformer_layers: 4
+  transformer_latent_dim: 64
+  dropout: 0.1
+  conv_oper: "sagc"
+  act: "relu"
+  headless: false
+
+training:
+  seed: 42
+  batch_size: 64
+  num_workers: 0
+  num_transform: 2
+  gcae_epochs: 10
+  gcae_lr: 0.001
+  gcae_weight_decay: 0.00005
+  gcae_reg_alpha: 1.0
+  transformer_epochs: 10
+  transformer_lr: 0.00005
+  transformer_weight_decay: 0.00005
+
+evaluation:
+  gaussian_smooth_max_sigma: 7
+  paper_metrics:
+    auc_roc: 69.15
+    auc_pr: 44.49
+    eer: 0.38
+
+alerting:
+  calibration_percentile: 99.0
+  default_threshold: 0.30
+  score_smooth_window: 3
+  consecutive_windows_k: 3
+  cooldown_seconds: 10.0
+  clip_duration_seconds: 5.0
+
+mqtt:
+  broker_host: "localhost"
+  broker_port: 1883
+  store_id: "store_01"
+  cam_id: "cam_01"
+  topic_template: "store/{store_id}/cam/{cam_id}/alert"
+  keepalive: 60
+
+dashboard:
+  host: "0.0.0.0"
+  port: 8000
+
