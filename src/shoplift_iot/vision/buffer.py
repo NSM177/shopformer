@@ -4,23 +4,13 @@ from __future__ import annotations
 
 import argparse
 from collections import OrderedDict
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping
 
 import numpy as np
-import yaml
 
-from shoplift_iot.vision.pose_track import PersonPose
-
-
-@dataclass(slots=True)
-class TrackWindow:
-    """A 12-frame temporal window of poses for a single tracked person."""
-
-    track_id: int
-    start_frame: int
-    end_frame: int
-    frame_to_kps: dict[int, np.ndarray]  # frame_idx -> (17, 3) float32 [x, y, conf]
+from shoplift_iot.config import AppConfig, load_app_config
+from shoplift_iot.contracts import PersonPose, PoseWindow, TrackWindow
 
 
 class PoseBuffer:
@@ -99,11 +89,12 @@ class PoseBuffer:
             self._last_seen.pop(tid, None)
 
 
-def load_buffer_from_config(config_path: Path) -> PoseBuffer:
-    """Create PoseBuffer from YAML configuration file."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    prep = cfg["preprocess"]
+def load_buffer_from_config(
+    config_or_path: Path | str | AppConfig | Mapping[str, Any],
+) -> PoseBuffer:
+    """Create PoseBuffer from application configuration."""
+    cfg = load_app_config(config_or_path)
+    prep = cfg.preprocess
     return PoseBuffer(
         window_size=int(prep["window_size"]),
         max_missing_frames=int(prep["max_missing_frames"]),

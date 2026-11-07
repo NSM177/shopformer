@@ -4,40 +4,16 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 import uuid
 
 import cv2
 import numpy as np
-import yaml
 
-
-@dataclass
-class AlertEvent:
-    """Anomaly alert event metadata ready for MQTT publication."""
-
-    event_id: str
-    ts: str
-    cam_id: str
-    track_id: int
-    score: float
-    threshold: float
-    clip_path: str
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert AlertEvent to the required MQTT JSON payload dictionary."""
-        return {
-            "event_id": self.event_id,
-            "ts": self.ts,
-            "cam_id": self.cam_id,
-            "track_id": int(self.track_id),
-            "score": round(float(self.score), 6),
-            "threshold": round(float(self.threshold), 6),
-            "clip_path": self.clip_path,
-        }
+from shoplift_iot.config import AppConfig, load_app_config
+from shoplift_iot.contracts import AlertEvent
+from shoplift_iot.model.bundle import ModelBundle
 
 
 class AlertManager:
@@ -75,37 +51,30 @@ class AlertManager:
     @classmethod
     def from_config(
         cls,
-        config_path: Path,
+        config_or_path: Path | str | AppConfig | Mapping[str, Any],
         project_root: Path | None = None,
         threshold_override: float | None = None,
+        bundle: ModelBundle | None = None,
     ) -> AlertManager:
-        """Instantiate AlertManager from YAML config and calibrated threshold file if available."""
-        root = project_root or config_path.resolve().parent.parent
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg: dict[str, Any] = yaml.safe_load(f)
+        """Instantiate AlertManager from `AppConfig` and `ModelBundle` threshold."""
+        app_cfg = load_app_config(config_or_path, project_root=project_root)
+        root = app_cfg.project_root
+        alert_cfg = app_cfg.alerting
 
-        alert_cfg = cfg["alerting"]
-        threshold = float(alert_cfg["default_threshold"])
-        th_file = root / cfg["paths"]["threshold_file"]
+        loaded_bundle = bundle or ModelBundle.load(app_cfg.bundle_dir, cfg=app_cfg, project_root=root)
+        threshold = float(loaded_bundle.threshold)
         if threshold_override is not None:
             threshold = float(threshold_override)
-        elif bool(alert_cfg.get("use_threshold_file", False)) and th_file.exists():
-            import json
-
-            with open(th_file, "r", encoding="utf-8") as tf:
-                th_data = json.load(tf)
-                if "threshold" in th_data:
-                    threshold = float(th_data["threshold"])
 
         return cls(
             threshold=threshold,
-            clips_dir=root / cfg["paths"]["clips_dir"],
-            cam_id=str(cfg["mqtt"]["cam_id"]),
+            clips_dir=app_cfg.resolve_path(app_cfg.paths["clips_dir"]),
+            cam_id=str(app_cfg.mqtt["cam_id"]),
             score_smooth_window=int(alert_cfg["score_smooth_window"]),
             consecutive_windows_k=int(alert_cfg["consecutive_windows_k"]),
             cooldown_seconds=float(alert_cfg["cooldown_seconds"]),
             clip_duration_seconds=float(alert_cfg["clip_duration_seconds"]),
-            target_fps=float(cfg["video"]["target_fps"]),
+            target_fps=float(app_cfg.video["target_fps"]),
             project_root=root,
         )
 
@@ -151,13 +120,11 @@ class AlertManager:
         self._last_alert_ts[track_id] = float(timestamp_sec)
         self._consecutive_counts[track_id] = 0
 
-        event_id = f"evt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        event_id = str(uuid.uuid4())
         clip_path = self.save_clip(event_id)
-        ts_iso = datetime.now(timezone.utc).isoformat()
 
-        return AlertEvent(
+        return AlertEvent.create(
             event_id=event_id,
-            ts=ts_iso,
             cam_id=self.cam_id,
             track_id=int(track_id),
             score=smoothed_score,

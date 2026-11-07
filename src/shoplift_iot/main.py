@@ -9,18 +9,17 @@ from typing import Any
 
 import cv2
 import numpy as np
-import yaml
 
-from shoplift_iot.alerting.alerting import AlertEvent, AlertManager
+from shoplift_iot.alerting.alerting import AlertManager
 from shoplift_iot.capture.source import load_source_from_config
+from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
+from shoplift_iot.contracts import AlertEvent, PersonPose
 from shoplift_iot.dashboard.db import EventDatabase
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
 from shoplift_iot.model.scorer import ShopformerScorer
 from shoplift_iot.vision.buffer import load_buffer_from_config
-from shoplift_iot.vision.pose_track import PersonPose, load_tracker_from_config
-from shoplift_iot.vision.preprocess import load_preprocessor_from_config
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from shoplift_iot.vision.pose_track import load_tracker_from_config
+from shoplift_iot.vision.preprocess import PosePreprocessor, load_preprocessor_from_config
 
 COCO17_EDGES = [
     (0, 1),
@@ -138,30 +137,34 @@ def _annotate_frame(
 
 def run_pipeline(
     source: str | int | Path,
-    config_path: Path,
+    config_path: Path | str | AppConfig,
     threshold_override: float | None = None,
     pose_json_path: Path | None = None,
     max_frames: int | None = None,
     device_override: str | None = None,
 ) -> list[AlertEvent]:
-    """Run the full 8-step inference and IoT alerting pipeline on a video source."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    """Run the full inference and IoT alerting pipeline on a video source."""
+    cfg = load_app_config(config_path, project_root=PROJECT_ROOT)
 
-    vid_res = (int(cfg["video"]["vid_res"][0]), int(cfg["video"]["vid_res"][1]))
-    swap_yx = bool(cfg["video"].get("swap_yx_from_poselift_json", True))
+    vid_res = (int(cfg.video["vid_res"][0]), int(cfg.video["vid_res"][1]))
+    swap_yx = bool(cfg.video.get("swap_yx_from_poselift_json", True))
 
-    reader = load_source_from_config(config_path, source)
-    tracker = load_tracker_from_config(config_path)
-    pose_buffer = load_buffer_from_config(config_path)
-    preprocessor = load_preprocessor_from_config(config_path)
-    scorer = ShopformerScorer.from_config(config_path, project_root=PROJECT_ROOT, device_override=device_override)
+    reader = load_source_from_config(cfg, source)
+    tracker = load_tracker_from_config(cfg)
+    pose_buffer = load_buffer_from_config(cfg)
+    scorer = ShopformerScorer.from_config(cfg, project_root=PROJECT_ROOT, device_override=device_override)
+    preprocessor = (
+        PosePreprocessor.from_bundle_dict(scorer.preprocess_config)
+        if scorer.preprocess_config
+        else load_preprocessor_from_config(cfg)
+    )
     alert_manager = AlertManager.from_config(
-        config_path,
+        cfg,
         project_root=PROJECT_ROOT,
         threshold_override=threshold_override,
+        bundle=scorer.bundle,
     )
-    mqtt_pub = MQTTPublisher.from_config(config_path, auto_connect=True)
+    mqtt_pub = MQTTPublisher.from_config(cfg, auto_connect=True)
 
     fallback_timeline: list[list[PersonPose]] | None = None
     if pose_json_path is not None and pose_json_path.exists():

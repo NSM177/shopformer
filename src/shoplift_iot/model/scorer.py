@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
@@ -19,8 +19,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 from tqdm import tqdm
-import yaml
 
+from shoplift_iot.config import AppConfig, load_app_config
+from shoplift_iot.model.bundle import ModelBundle
 from shoplift_iot.vision.preprocess import keypoints17_to_coco18, normalize_pose
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -651,6 +652,9 @@ class ShopformerScorer:
         gcae: GCAE,
         transformer: TransformerPredictor,
         device: str = "cpu",
+        threshold: float = 0.30,
+        preprocess_config: dict[str, Any] | None = None,
+        bundle: ModelBundle | None = None,
     ) -> None:
         self.device = device
         self.gcae = gcae.to(device)
@@ -659,33 +663,61 @@ class ShopformerScorer:
         self.encoder.eval()
         self.transformer = transformer.to(device)
         self.transformer.eval()
+        self.threshold = float(threshold)
+        self.preprocess_config: dict[str, Any] = dict(preprocess_config or {})
+        self.bundle = bundle
+
+    @classmethod
+    def from_bundle(
+        cls,
+        bundle_or_dir: ModelBundle | Path | str,
+        device: str = "cpu",
+        project_root: Path | None = None,
+    ) -> ShopformerScorer:
+        """Load weights, calibrated threshold, and normalization config from a single bundle directory."""
+        root = project_root or PROJECT_ROOT
+        resolved_dev = resolve_device(device)
+        bundle = (
+            bundle_or_dir
+            if isinstance(bundle_or_dir, ModelBundle)
+            else ModelBundle.load(bundle_or_dir, project_root=root)
+        )
+
+        cfg_dict = {
+            "model": bundle.model_config,
+            "preprocess": bundle.preprocess,
+        }
+        gcae, transformer = build_Models_from_config(cfg_dict, resolved_dev)
+
+        if bundle.model_path.exists():
+            ckpt = torch.load(bundle.model_path, map_location=resolved_dev, weights_only=False)
+            if ckpt.get("gcae_state_dict") is not None:
+                gcae.load_state_dict(ckpt["gcae_state_dict"])
+            if ckpt.get("transformer_state_dict") is not None:
+                transformer.load_state_dict(ckpt["transformer_state_dict"])
+
+        return cls(
+            gcae=gcae,
+            transformer=transformer,
+            device=resolved_dev,
+            threshold=bundle.threshold,
+            preprocess_config=bundle.preprocess,
+            bundle=bundle,
+        )
 
     @classmethod
     def from_config(
         cls,
-        config_path: Path,
+        config_path: Path | str | AppConfig | Mapping[str, Any],
         project_root: Path | None = None,
         device_override: str | None = None,
     ) -> ShopformerScorer:
-        """Load ShopformerScorer and pretrained checkpoints specified in YAML config."""
+        """Load ShopformerScorer from the model bundle specified in `AppConfig`."""
         root = project_root or PROJECT_ROOT
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg: dict[str, Any] = yaml.safe_load(f)
-
-        device = resolve_device(device_override or str(cfg["pose_track"]["device"]))
-        gcae, transformer = build_Models_from_config(cfg, device)
-
-        gcae_ckpt = root / cfg["paths"]["gcae_ckpt"]
-        shopformer_ckpt = root / cfg["paths"]["shopformer_ckpt"]
-
-        if gcae_ckpt.exists():
-            state_g = torch.load(gcae_ckpt, map_location=device, weights_only=False)
-            gcae.load_state_dict(state_g["state_dict"])
-        if shopformer_ckpt.exists():
-            state_t = torch.load(shopformer_ckpt, map_location=device, weights_only=False)
-            transformer.load_state_dict(state_t["state_dict"])
-
-        return cls(gcae=gcae, transformer=transformer, device=device)
+        app_cfg = load_app_config(config_path, project_root=root)
+        device = resolve_device(device_override or str(app_cfg.pose_track["device"]))
+        bundle = ModelBundle.load(app_cfg.bundle_dir, cfg=app_cfg, project_root=root)
+        return cls.from_bundle(bundle, device=device, project_root=root)
 
     def score_batch(self, pose_batch: np.ndarray | torch.Tensor) -> np.ndarray:
         """Compute anomaly score (MSE reconstruction error) for a batch of windows (B, 2, 12, 18)."""

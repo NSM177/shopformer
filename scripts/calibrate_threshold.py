@@ -19,6 +19,7 @@ if str(SRC_DIR) not in sys.path:
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from shoplift_iot.model.bundle import ModelBundle  # noqa: E402
 from shoplift_iot.model.scorer import PoseSegDataset, ShopformerScorer  # noqa: E402
 
 
@@ -123,6 +124,9 @@ def calibrate_threshold(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2)
+
+    bundle_rel = cfg["paths"].get("bundle_dir", "checkpoints/shopformer_v1")
+    ModelBundle.export_from_legacy(bundle_rel, cfg=cfg, project_root=root)
 
     print("\n" + "=" * 60)
     print(f"Threshold Calibration Complete (Percentile = {percentile:.1f}%)")

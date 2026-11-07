@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 import time
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import cv2
 from fastapi import FastAPI, HTTPException
@@ -17,12 +17,11 @@ import numpy as np
 import paho.mqtt.client as mqtt
 from pydantic import BaseModel
 import uvicorn
-import yaml
 
+from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
 from shoplift_iot.dashboard.db import EventDatabase
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "index.html"
 
 
@@ -144,22 +143,20 @@ def _stream_mp4_as_mjpeg(clip_file: Path) -> Iterator[bytes]:
 
 
 def create_app(
-    config_path: Path | None = None,
+    config_path: Path | str | AppConfig | Mapping[str, Any] | None = None,
     db_path_override: Path | None = None,
     clips_dir_override: Path | None = None,
     start_mqtt: bool = True,
 ) -> FastAPI:
     """Create and configure the FastAPI dashboard application."""
-    cfg_file = config_path or (PROJECT_ROOT / "configs" / "default.yaml")
-    with open(cfg_file, "r", encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    cfg = load_app_config(config_path, project_root=PROJECT_ROOT)
 
-    db_path = db_path_override or (PROJECT_ROOT / cfg["paths"]["db_path"])
-    clips_dir = clips_dir_override or (PROJECT_ROOT / cfg["paths"]["clips_dir"])
+    db_path = db_path_override or cfg.resolve_path(cfg.paths["db_path"])
+    clips_dir = clips_dir_override or cfg.resolve_path(cfg.paths["clips_dir"])
     clips_dir.mkdir(parents=True, exist_ok=True)
 
-    broker_host = os.environ.get("MQTT_BROKER_HOST", str(cfg["mqtt"]["broker_host"]))
-    broker_port = int(os.environ.get("MQTT_BROKER_PORT", cfg["mqtt"]["broker_port"]))
+    broker_host = os.environ.get("MQTT_BROKER_HOST", str(cfg.mqtt["broker_host"]))
+    broker_port = int(os.environ.get("MQTT_BROKER_PORT", cfg.mqtt["broker_port"]))
 
     db = EventDatabase(db_path)
     subscriber = MQTTEventSubscriber(
@@ -234,13 +231,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="Bind port override.")
     args = parser.parse_args()
 
-    cfg_path = PROJECT_ROOT / args.config
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_app_config(args.config, project_root=PROJECT_ROOT)
 
-    host = args.host or str(cfg["dashboard"]["host"])
-    port = int(args.port or cfg["dashboard"]["port"])
-    app = create_app(config_path=cfg_path, start_mqtt=True)
+    host = args.host or str(cfg.dashboard["host"])
+    port = int(args.port or cfg.dashboard["port"])
+    app = create_app(config_path=cfg, start_mqtt=True)
     uvicorn.run(app, host=host, port=port)
 
 

@@ -1,0 +1,16 @@
+{
+  "window_size": 12,
+  "window_stride_train": 6,
+  "window_stride_eval": 1,
+  "max_missing_frames": 2,
+  "smoothing_window": 8,
+  "num_keypoints_coco17": 17,
+  "num_keypoints_coco18": 18,
+  "symm_range": false,
+  "vid_res": [
+    1920,
+    1080
+  ],
+  "target_fps": 15.0,
+  "swap_yx_from_poselift_json": true
+}

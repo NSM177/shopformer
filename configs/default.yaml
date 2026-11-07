@@ -4,6 +4,7 @@ paths:
   pose_test_dir: "data/PoseLift/pose/test"
   gt_mask_dir: "data/PoseLift/gt/test_frame_mask"
   checkpoints_dir: "checkpoints"
+  bundle_dir: "checkpoints/shopformer_v1"
   gcae_ckpt: "checkpoints/gcae_best.pt"
   shopformer_ckpt: "checkpoints/shopformer_best.pt"
   threshold_file: "checkpoints/threshold.json"
@@ -84,4 +85,16 @@ mqtt:
 dashboard:
   host: "0.0.0.0"
   port: 8000
+
+pipeline:
+  capture_queue_size: 2
+  score_queue_size: 32
+  reconnect_delay_seconds: 1.0
+  max_reconnect_attempts: 3
+  pre_event_seconds: 3.0
+  post_event_seconds: 2.0
+  status_interval_seconds: 5.0
+  outbox_poll_interval_seconds: 0.5
+  outbox_max_retries: 10
+
 

@@ -6,12 +6,12 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import paho.mqtt.client as mqtt
-import yaml
 
-from shoplift_iot.alerting.alerting import AlertEvent
+from shoplift_iot.config import AppConfig, load_app_config
+from shoplift_iot.contracts import AlertEvent
 
 REQUIRED_KEYS = (
     "event_id",
@@ -53,10 +53,13 @@ class MQTTPublisher:
             self.connect()
 
     @classmethod
-    def from_config(cls, config_path: Path, auto_connect: bool = True) -> MQTTPublisher:
-        """Create MQTTPublisher from YAML configuration file."""
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)["mqtt"]
+    def from_config(
+        cls,
+        config_or_path: Path | str | AppConfig | Mapping[str, Any],
+        auto_connect: bool = True,
+    ) -> MQTTPublisher:
+        """Create MQTTPublisher from application configuration."""
+        cfg = load_app_config(config_or_path).mqtt
         return cls(
             broker_host=str(cfg["broker_host"]),
             broker_port=int(cfg["broker_port"]),

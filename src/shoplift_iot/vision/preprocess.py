@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 from scipy.ndimage import uniform_filter1d
 import torch
-import yaml
+
+from shoplift_iot.config import AppConfig, load_app_config
 
 
 def get_aff_trans_mat(
@@ -279,12 +280,26 @@ class PosePreprocessor:
         return normed
 
 
-def load_preprocessor_from_config(config_path: Path) -> PosePreprocessor:
-    """Create PosePreprocessor from YAML configuration file."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
-    prep = cfg["preprocess"]
-    vid = cfg["video"]
+    @classmethod
+    def from_bundle_dict(cls, prep_dict: Mapping[str, Any]) -> PosePreprocessor:
+        """Create PosePreprocessor directly from a ModelBundle's `preprocess.json` dict."""
+        vid_res_raw = prep_dict.get("vid_res", [1920, 1080])
+        return cls(
+            vid_res=(int(vid_res_raw[0]), int(vid_res_raw[1])),
+            window_size=int(prep_dict.get("window_size", 12)),
+            smoothing_window=int(prep_dict.get("smoothing_window", 8)),
+            max_missing_frames=int(prep_dict.get("max_missing_frames", 2)),
+            symm_range=bool(prep_dict.get("symm_range", False)),
+        )
+
+
+def load_preprocessor_from_config(
+    config_or_path: Path | str | AppConfig | Mapping[str, Any],
+) -> PosePreprocessor:
+    """Create PosePreprocessor from application configuration."""
+    cfg = load_app_config(config_or_path)
+    prep = cfg.preprocess
+    vid = cfg.video
     return PosePreprocessor(
         vid_res=(int(vid["vid_res"][0]), int(vid["vid_res"][1])),
         window_size=int(prep["window_size"]),

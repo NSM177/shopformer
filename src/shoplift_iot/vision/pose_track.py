@@ -3,27 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 import torch
-import yaml
 
 from shoplift_iot.capture.source import load_source_from_config
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
-
-@dataclass(slots=True)
-class PersonPose:
-    """Detected and tracked person with bounding box and 17 COCO keypoints."""
-
-    track_id: int
-    bbox_xywh: np.ndarray  # shape (4,) float32 [x_center, y_center, width, height]
-    keypoints_xyc: np.ndarray  # shape (17, 3) float32 [x, y, conf]
-    score: float
+from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
+from shoplift_iot.contracts import PersonPose
 
 
 def _resolve_device(requested: str) -> str:
@@ -105,11 +93,13 @@ class PoseTracker:
         return poses
 
 
-def load_tracker_from_config(config_path: Path, yolo_instance: Any | None = None) -> PoseTracker:
-    """Create PoseTracker from YAML configuration file."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    pt_cfg = cfg["pose_track"]
+def load_tracker_from_config(
+    config_or_path: Path | str | AppConfig | Mapping[str, Any],
+    yolo_instance: Any | None = None,
+) -> PoseTracker:
+    """Create PoseTracker from application configuration."""
+    cfg = load_app_config(config_or_path)
+    pt_cfg = cfg.pose_track
     return PoseTracker(
         model_name=str(pt_cfg["yolo_model"]),
         tracker_config=str(pt_cfg["tracker_config"]),

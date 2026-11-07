@@ -3,27 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 import time
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import cv2
-import numpy as np
-import yaml
 
-
-@dataclass(slots=True)
-class FramePacket:
-    """Single downsampled video frame with metadata."""
-
-    frame_idx: int
-    raw_frame_idx: int
-    timestamp: float
-    frame: np.ndarray
-    width: int
-    height: int
-    fps: float
+from shoplift_iot.config import AppConfig, load_app_config
+from shoplift_iot.contracts import FramePacket
 
 
 class VideoSource:
@@ -124,11 +111,13 @@ class VideoSource:
             raw_idx += 1
 
 
-def load_source_from_config(config_path: Path, source: str | int | Path) -> VideoSource:
-    """Create a VideoSource using target_fps from YAML configuration."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    target_fps = float(cfg["video"]["target_fps"])
+def load_source_from_config(
+    config_or_path: Path | str | AppConfig | Mapping[str, Any],
+    source: str | int | Path,
+) -> VideoSource:
+    """Create a VideoSource using target_fps from application configuration."""
+    cfg = load_app_config(config_or_path)
+    target_fps = float(cfg.video["target_fps"])
     return VideoSource(source=source, target_fps=target_fps)
 
 

@@ -24,6 +24,10 @@ RUN mkdir -p /app/data/clips
 
 COPY configs/ /app/configs/
 COPY src/shoplift_iot/__init__.py /app/src/shoplift_iot/__init__.py
+COPY src/shoplift_iot/config.py /app/src/shoplift_iot/config.py
+COPY src/shoplift_iot/contracts.py /app/src/shoplift_iot/contracts.py
+COPY src/shoplift_iot/model/__init__.py /app/src/shoplift_iot/model/__init__.py
+COPY src/shoplift_iot/model/bundle.py /app/src/shoplift_iot/model/bundle.py
 COPY src/shoplift_iot/alerting/ /app/src/shoplift_iot/alerting/
 COPY src/shoplift_iot/messaging/ /app/src/shoplift_iot/messaging/
 COPY src/shoplift_iot/dashboard/ /app/src/shoplift_iot/dashboard/
