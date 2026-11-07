@@ -16,7 +16,7 @@ video:
   swap_yx_from_poselift_json: true
 
 pose_track:
-  yolo_model: "yolov8n-pose.pt"
+  yolo_model: "models/pretrained/yolov8n-pose.pt"
   tracker_config: "bytetrack.yaml"
   conf_threshold: 0.25
   iou_threshold: 0.45

@@ -21,9 +21,9 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import yaml
 
-from src.preprocess import keypoints17_to_coco18, normalize_pose
+from shoplift_iot.vision.preprocess import keypoints17_to_coco18, normalize_pose
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SHOPFORMER_DIR = PROJECT_ROOT / "third_party" / "Shopformer"
 if str(SHOPFORMER_DIR) not in sys.path:
     sys.path.insert(0, str(SHOPFORMER_DIR))

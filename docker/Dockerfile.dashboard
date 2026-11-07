@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    fastapi \
+    "uvicorn[standard]" \
+    paho-mqtt \
+    pyyaml \
+    numpy \
+    opencv-python-headless \
+    pydantic
+
+RUN mkdir -p /app/data/clips
+
+COPY configs/ /app/configs/
+COPY src/shoplift_iot/__init__.py /app/src/shoplift_iot/__init__.py
+COPY src/shoplift_iot/alerting/ /app/src/shoplift_iot/alerting/
+COPY src/shoplift_iot/messaging/ /app/src/shoplift_iot/messaging/
+COPY src/shoplift_iot/dashboard/ /app/src/shoplift_iot/dashboard/
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/ || exit 1
+
+CMD ["python", "-m", "shoplift_iot.dashboard.app", "--config", "configs/default.yaml", "--host", "0.0.0.0", "--port", "8000"]

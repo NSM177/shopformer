@@ -174,21 +174,21 @@ docker compose up -d --build
 
 **Cách 2 — Chạy trực tiếp Dashboard trên máy host (nếu không bật Docker):**
 ```powershell
-.\.venv\Scripts\python.exe -m src.dashboard.app --port 8000
+.\.venv\Scripts\python.exe -m shoplift_iot.dashboard.app --port 8000
 ```
 Mở trình duyệt truy cập: **`http://localhost:8000`**
 
 ### Bước 3: Chạy Suy luận trên Video Bình thường (Không phát cảnh báo giả)
 Mở một cửa sổ terminal thứ hai và chạy trên video người đứng/di chuyển bình thường:
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --source "data/extracted_samples/demo_rgb_people.mp4"
+.\.venv\Scripts\python.exe -m shoplift_iot.main --source "data/extracted_samples/demo_rgb_people.mp4"
 ```
 - **Quan sát**: Điểm MSE chỉ dao động quanh `0.17 – 0.26` (thấp hơn ngưỡng `0.30`), không vượt ngưỡng trong 3 cửa sổ liên tiếp nên `Total anomaly alerts emitted: 0`.
 
 ### Bước 4: Chạy Suy luận trên Video Hành vi Bất thường (Phát cảnh báo MQTT + Lưu Clip 5s)
 Chạy trên video mẫu hành vi giấu hàng của PoseLift:
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --source "third_party/PoseLift/Samples/Hiding an item in their pants.mp4" --max-frames 45
+.\.venv\Scripts\python.exe -m shoplift_iot.main --source "third_party/PoseLift/Samples/Hiding an item in their pants.mp4" --max-frames 45
 ```
 - **Quan sát trên Terminal**:
   - Khi điểm MSE đã làm mượt vượt ngưỡng `0.30` trong **3 cửa sổ liên tiếp** (`K=3`), hệ thống in ra dòng `[ALERT]`, lưu đoạn clip 5 giây có vẽ khung xương + điểm số vào `data/clips/evt_*.mp4`, và gửi bản tin JSON qua MQTT topic `store/store_01/cam/cam_01/alert`.

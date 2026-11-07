@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from src.pose_track import PersonPose
+from shoplift_iot.vision.pose_track import PersonPose
 
 
 @dataclass(slots=True)

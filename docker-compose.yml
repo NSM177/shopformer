@@ -11,7 +11,7 @@ services:
   dashboard:
     build:
       context: .
-      dockerfile: Dockerfile.dashboard
+      dockerfile: docker/Dockerfile.dashboard
     container_name: shopformer-dashboard
     ports:
       - "8000:8000"

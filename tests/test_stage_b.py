@@ -9,17 +9,20 @@ import numpy as np
 import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.evaluate import build_test_dataset, load_config  # noqa: E402
-from src.preprocess import keypoints17_to_coco18, normalize_pose  # noqa: E402
-from src.scorer import (  # noqa: E402
+from shoplift_iot.model.scorer import (  # noqa: E402
     Encoder_T,
     build_Models_from_config,
     score_auc,
     tokenize_batch,
 )
+from shoplift_iot.vision.preprocess import keypoints17_to_coco18, normalize_pose  # noqa: E402
 
 
 def test_config_and_poselift_files_exist() -> None:

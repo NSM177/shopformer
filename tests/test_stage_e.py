@@ -9,13 +9,16 @@ from fastapi.testclient import TestClient
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.alerting import AlertManager  # noqa: E402
-from src.dashboard.app import create_app  # noqa: E402
-from src.main import run_pipeline  # noqa: E402
-from src.mqtt_pub import MQTTPublisher, REQUIRED_KEYS  # noqa: E402
+from shoplift_iot.alerting.alerting import AlertManager  # noqa: E402
+from shoplift_iot.dashboard.app import create_app  # noqa: E402
+from shoplift_iot.main import run_pipeline  # noqa: E402
+from shoplift_iot.messaging.mqtt_pub import MQTTPublisher, REQUIRED_KEYS  # noqa: E402
 
 
 def test_alert_manager_k_consecutive_and_cooldown(tmp_path: Path) -> None:

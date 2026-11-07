@@ -13,12 +13,18 @@ import numpy as np
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.pose_track import PoseTracker, load_tracker_from_config  # noqa: E402
-from src.preprocess import interpolate_missing_frames, smooth_pose_sequence  # noqa: E402
-from src.source import VideoSource  # noqa: E402
+from shoplift_iot.capture.source import VideoSource  # noqa: E402
+from shoplift_iot.vision.pose_track import PoseTracker, load_tracker_from_config  # noqa: E402
+from shoplift_iot.vision.preprocess import (  # noqa: E402
+    interpolate_missing_frames,
+    smooth_pose_sequence,
+)
 
 
 def _interpolate_contiguous_segments(

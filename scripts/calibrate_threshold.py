@@ -13,10 +13,13 @@ from torch.utils.data import DataLoader
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.scorer import PoseSegDataset, ShopformerScorer  # noqa: E402
+from shoplift_iot.model.scorer import PoseSegDataset, ShopformerScorer  # noqa: E402
 
 
 def compute_normal_scores(

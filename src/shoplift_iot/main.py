@@ -11,16 +11,16 @@ import cv2
 import numpy as np
 import yaml
 
-from src.alerting import AlertEvent, AlertManager
-from src.buffer import load_buffer_from_config
-from src.dashboard.db import EventDatabase
-from src.mqtt_pub import MQTTPublisher
-from src.pose_track import PersonPose, load_tracker_from_config
-from src.preprocess import load_preprocessor_from_config
-from src.scorer import ShopformerScorer
-from src.source import load_source_from_config
+from shoplift_iot.alerting.alerting import AlertEvent, AlertManager
+from shoplift_iot.capture.source import load_source_from_config
+from shoplift_iot.dashboard.db import EventDatabase
+from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
+from shoplift_iot.model.scorer import ShopformerScorer
+from shoplift_iot.vision.buffer import load_buffer_from_config
+from shoplift_iot.vision.pose_track import PersonPose, load_tracker_from_config
+from shoplift_iot.vision.preprocess import load_preprocessor_from_config
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 COCO17_EDGES = [
     (0, 1),

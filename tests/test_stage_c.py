@@ -12,24 +12,24 @@ import numpy as np
 import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SHOPFORMER_DIR = PROJECT_ROOT / "third_party" / "Shopformer"
-if str(SHOPFORMER_DIR) not in sys.path:
-    sys.path.insert(0, str(SHOPFORMER_DIR))
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.extract_poses import extract_video_poses_to_poselift_dict  # noqa: E402
-from src.buffer import PoseBuffer  # noqa: E402
-from src.pose_track import PersonPose, PoseTracker  # noqa: E402
-from src.preprocess import (  # noqa: E402
+from shoplift_iot.capture.source import VideoSource  # noqa: E402
+from shoplift_iot.model.scorer import PoseSegDataset  # noqa: E402
+from shoplift_iot.vision.buffer import PoseBuffer  # noqa: E402
+from shoplift_iot.vision.pose_track import PersonPose, PoseTracker  # noqa: E402
+from shoplift_iot.vision.preprocess import (  # noqa: E402
     PosePreprocessor,
     coco17_to_openpose18,
     interpolate_missing_frames,
     normalize_shopformer_pose,
     smooth_pose_sequence,
 )
-from src.scorer import PoseSegDataset  # noqa: E402
-from src.source import VideoSource  # noqa: E402
 
 
 def _make_dummy_video(path: Path, fps: float = 30.0, num_frames: int = 30) -> None:

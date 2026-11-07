@@ -11,7 +11,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 import yaml
 
-from src.alerting import AlertEvent
+from shoplift_iot.alerting.alerting import AlertEvent
 
 REQUIRED_KEYS = (
     "event_id",

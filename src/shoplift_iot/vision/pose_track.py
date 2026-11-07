@@ -11,7 +11,9 @@ import numpy as np
 import torch
 import yaml
 
-from src.source import load_source_from_config
+from shoplift_iot.capture.source import load_source_from_config
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(slots=True)
@@ -35,7 +37,7 @@ class PoseTracker:
 
     def __init__(
         self,
-        model_name: str = "yolov8n-pose.pt",
+        model_name: str = "models/pretrained/yolov8n-pose.pt",
         tracker_config: str = "bytetrack.yaml",
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
@@ -43,7 +45,8 @@ class PoseTracker:
         yolo_instance: Any | None = None,
     ) -> None:
         """Initialize YOLOv8-pose + ByteTrack tracker."""
-        self.model_name = model_name
+        candidate = PROJECT_ROOT / model_name
+        self.model_name = str(candidate) if candidate.exists() else model_name
         self.tracker_config = tracker_config
         self.conf_threshold = float(conf_threshold)
         self.iou_threshold = float(iou_threshold)

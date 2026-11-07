@@ -19,10 +19,10 @@ from pydantic import BaseModel
 import uvicorn
 import yaml
 
-from src.dashboard.db import EventDatabase
-from src.mqtt_pub import MQTTPublisher
+from shoplift_iot.dashboard.db import EventDatabase
+from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "index.html"
 
 
