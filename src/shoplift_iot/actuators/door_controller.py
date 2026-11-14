@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping
 import paho.mqtt.client as mqtt
 
 from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
-from shoplift_iot.contracts import DoorCommand, DoorStatus
+from shoplift_iot.contracts import DoorCommand, DoorStatus, to_vn_iso
 
 
 class DoorController:
@@ -184,7 +184,7 @@ class DoorController:
     ) -> dict[str, Any]:
         """Safety Constraint #4: Every door command/transition is logged with timestamp, actor, and event_id."""
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": to_vn_iso(),
             "store_id": self.store_id,
             "actor": str(actor),
             "action": str(action),
@@ -347,3 +347,4 @@ class DoorController:
             if self.state != "locked" or self.lock_deadline is None:
                 return 0.0
             return max(0.0, self.lock_deadline - ts)
+

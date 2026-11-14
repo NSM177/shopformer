@@ -20,7 +20,7 @@ import uvicorn
 
 from shoplift_iot.actuators.door_controller import DoorController
 from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
-from shoplift_iot.contracts import DoorCommand, DoorStatus
+from shoplift_iot.contracts import DoorCommand, DoorStatus, to_vn_iso
 from shoplift_iot.dashboard.db import EventDatabase
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
 from shoplift_iot.messaging.telegram_bot import TelegramAlertBot
@@ -71,6 +71,7 @@ class MQTTEventSubscriber:
         door_cmd_topic_template: str = "store/{store_id}/door/cmd",
         telegram_bot: TelegramAlertBot | None = None,
         clips_dir: Path | None = None,
+        door_controller: DoorController | None = None,
     ) -> None:
         self.db = db
         self.broker_host = broker_host
@@ -82,6 +83,7 @@ class MQTTEventSubscriber:
         self.door_cmd_topic = door_cmd_topic_template.format(store_id=self.store_id)
         self.telegram_bot = telegram_bot
         self.clips_dir = clips_dir
+        self.door_controller = door_controller
 
         self.door_status: dict[str, Any] = DoorStatus.create(state="unlocked", event_id="").to_dict()
         self.cam_status: dict[str, str] = {}
@@ -89,6 +91,7 @@ class MQTTEventSubscriber:
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
+        self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
         self._running = False
 
@@ -104,6 +107,14 @@ class MQTTEventSubscriber:
         client.subscribe(self.door_status_filter, qos=1)
         client.subscribe(self.cam_status_filter, qos=1)
 
+    def _on_disconnect(self, *args: Any, **kwargs: Any) -> None:
+        """Fail-safe: if MQTT broker disconnects, immediately reflect UNLOCKED door state."""
+        if self.door_controller is not None:
+            st = self.door_controller.fail_safe_unlock(reason="mqtt_broker_disconnected")
+            self.door_status = st.to_dict()
+        else:
+            self.door_status = DoorStatus.create(state="unlocked", event_id="").to_dict()
+
     def _on_message(
         self,
         client: mqtt.Client,
@@ -117,10 +128,16 @@ class MQTTEventSubscriber:
                 data = json.loads(raw_text)
                 status = DoorStatus(
                     state=str(data.get("state", "unlocked")),
-                    ts=str(data.get("ts", "")),
+                    ts=to_vn_iso(str(data.get("ts", ""))),
                     event_id=str(data.get("event_id", "")),
                 )
                 self.door_status = status.to_dict()
+                if self.door_controller is not None:
+                    with self.door_controller._lock:
+                        self.door_controller.state = status.state
+                        self.door_controller.current_event_id = status.event_id
+                        if status.state == "unlocked":
+                            self.door_controller.lock_deadline = None
                 return
 
             if topic.endswith("/status") and "/cam/" in topic:
@@ -133,6 +150,7 @@ class MQTTEventSubscriber:
 
             payload = json.loads(raw_text)
             clean = MQTTPublisher.validate_payload(payload)
+            clean["ts"] = to_vn_iso(str(clean["ts"]))
             saved = self.db.upsert_event(clean)
             if self.telegram_bot is not None and self.telegram_bot.is_enabled:
                 clip_file = None
@@ -178,6 +196,36 @@ class MQTTEventSubscriber:
             except Exception:
                 pass
             self._running = False
+
+
+def _ensure_webm_clip(mp4_file: Path) -> Path | None:
+    """Convert an OpenCV `mp4v` clip into a browser-native `VP80` `.webm` file if not already cached."""
+    if not mp4_file.exists():
+        return None
+    webm_file = mp4_file.with_suffix(".webm")
+    if webm_file.exists() and webm_file.stat().st_size > 0:
+        return webm_file
+
+    cap = cv2.VideoCapture(str(mp4_file))
+    if not cap.isOpened():
+        return None
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 15.0)
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 224)
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 224)
+    writer = cv2.VideoWriter(str(webm_file), cv2.VideoWriter_fourcc(*"VP80"), fps, (w, h))
+    if not writer.isOpened():
+        cap.release()
+        return None
+    frames_written = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        writer.write(frame)
+        frames_written += 1
+    cap.release()
+    writer.release()
+    return webm_file if (frames_written > 0 and webm_file.exists()) else None
 
 
 def _stream_mp4_as_mjpeg(clip_file: Path) -> Iterator[bytes]:
@@ -268,6 +316,7 @@ def create_app(
         topic_filter="store/+/cam/+/alert",
         telegram_bot=telegram_bot,
         clips_dir=clips_dir,
+        door_controller=door_controller,
     )
 
     def _execute_door_command(cmd: DoorCommand, actor: str = "admin_dashboard") -> dict[str, Any]:
@@ -315,15 +364,39 @@ def create_app(
 
     @app.get("/api/events")
     def list_events(limit: int = 100) -> dict[str, Any]:
-        return {"events": db.list_events(limit=limit)}
+        events = db.list_events(limit=limit)
+        for ev in events:
+            ev["ts"] = to_vn_iso(str(ev.get("ts", "")))
+            if ev.get("decided_at"):
+                ev["decided_at"] = to_vn_iso(str(ev["decided_at"]))
+        return {"events": events}
 
     @app.post("/api/events")
     def create_event(req: EventCreateRequest) -> dict[str, Any]:
-        saved = db.upsert_event(req.model_dump())
+        data = req.model_dump()
+        data["ts"] = to_vn_iso(str(data["ts"]))
+        saved = db.upsert_event(data)
         if telegram_bot.is_enabled:
             clip_file = clips_dir / Path(str(saved["clip_path"])).name
             telegram_bot.send_alert(saved, clip_file=clip_file)
         return {"event": saved}
+
+    @app.delete("/api/events")
+    @app.post("/api/events/reset")
+    def reset_events(delete_clips: bool = True) -> dict[str, int]:
+        deleted_events = db.clear_events()
+        deleted_clips = 0
+        if delete_clips and clips_dir.exists():
+            for clip_file in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.webm")):
+                try:
+                    clip_file.unlink()
+                    deleted_clips += 1
+                except OSError:
+                    pass
+        return {
+            "deleted_events": deleted_events,
+            "deleted_clips": deleted_clips,
+        }
 
     @app.post("/api/events/{event_id}/decision")
     def update_decision(event_id: str, req: DecisionRequest) -> dict[str, Any]:
@@ -339,6 +412,7 @@ def create_app(
         expired = door_controller.tick()
         if expired is not None:
             subscriber.door_status = expired.to_dict()
+        subscriber.door_status["ts"] = to_vn_iso(str(subscriber.door_status.get("ts", "")))
         return {
             "door_status": subscriber.door_status,
             "remaining_ttl_sec": round(door_controller.remaining_ttl(), 1),
@@ -375,12 +449,25 @@ def create_app(
         return _execute_door_command(cmd, actor=actor)
 
     @app.get("/clips/{clip_name}")
+    @app.get("/data/clips/{clip_name}")
     def get_clip_file(clip_name: str) -> FileResponse:
         safe_name = Path(clip_name).name
         target = clips_dir / safe_name
         if not target.exists():
             raise HTTPException(status_code=404, detail="Clip file not found")
-        return FileResponse(path=str(target), media_type="video/mp4", filename=safe_name)
+        media_type = "video/webm" if safe_name.endswith(".webm") else "video/mp4"
+        return FileResponse(path=str(target), media_type=media_type, filename=safe_name)
+
+    @app.get("/api/clips/{clip_name}/webm")
+    def get_clip_webm(clip_name: str) -> FileResponse:
+        safe_name = Path(clip_name).name
+        target_mp4 = clips_dir / safe_name
+        if not target_mp4.exists():
+            raise HTTPException(status_code=404, detail="Clip file not found")
+        webm_path = _ensure_webm_clip(target_mp4)
+        if webm_path is None or not webm_path.exists():
+            return FileResponse(path=str(target_mp4), media_type="video/mp4", filename=safe_name)
+        return FileResponse(path=str(webm_path), media_type="video/webm", filename=webm_path.name)
 
     @app.get("/api/clips/{clip_name}/mjpeg")
     def stream_clip_mjpeg(clip_name: str) -> StreamingResponse:

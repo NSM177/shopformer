@@ -16,10 +16,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from shoplift_iot.alerting.alerting import AlertManager  # noqa: E402
+from shoplift_iot.contracts import to_vn_iso  # noqa: E402
 from shoplift_iot.dashboard.app import create_app  # noqa: E402
 from shoplift_iot.main import run_pipeline  # noqa: E402
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher, REQUIRED_KEYS  # noqa: E402
 from shoplift_iot.messaging.telegram_bot import TelegramAlertBot  # noqa: E402
+from scripts.reset_events import reset_all_events  # noqa: E402
 
 
 def test_alert_manager_k_consecutive_and_cooldown(tmp_path: Path) -> None:
@@ -363,6 +365,110 @@ def test_gd7_docker_compose_and_readme_contracts() -> None:
     assert "store/{store_id}/door/status" in readme_text
     assert "auto_lock" in readme_text
     assert "ttl_sec" in readme_text
+
+
+def test_reset_events_api_and_script(tmp_path: Path) -> None:
+    """Verify deleting all events via DELETE /api/events and scripts/reset_events.py."""
+    db_file = tmp_path / "reset_test.db"
+    clips_dir = tmp_path / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    app = create_app(
+        config_path=PROJECT_ROOT / "configs" / "default.yaml",
+        db_path_override=db_file,
+        clips_dir_override=clips_dir,
+        audit_log_override=tmp_path / "audit.log",
+        start_mqtt=False,
+    )
+    client = TestClient(app)
+
+    # Create 2 events and 2 clip files
+    for idx in (1, 2):
+        clip_file = clips_dir / f"evt_{idx}.mp4"
+        clip_file.write_bytes(b"fake_mp4_bytes")
+        client.post(
+            "/api/events",
+            json={
+                "event_id": f"evt_{idx}",
+                "ts": "2026-11-14T17:00:00+00:00",
+                "cam_id": "cam_01",
+                "track_id": idx,
+                "score": 0.72,
+                "threshold": 0.586,
+                "clip_path": f"data/clips/evt_{idx}.mp4",
+            },
+        )
+
+    assert len(client.get("/api/events").json()["events"]) == 2
+
+    # Reset via DELETE /api/events
+    res_del = client.delete("/api/events?delete_clips=true")
+    assert res_del.status_code == 200
+    assert res_del.json()["deleted_events"] == 2
+    assert res_del.json()["deleted_clips"] == 2
+    assert len(client.get("/api/events").json()["events"]) == 0
+    assert len(list(clips_dir.glob("*.mp4"))) == 0
+
+    # Insert 1 more event and reset via scripts/reset_events.py
+    (clips_dir / "evt_3.mp4").write_bytes(b"fake_mp4_bytes")
+    client.post(
+        "/api/events",
+        json={
+            "event_id": "evt_3",
+            "ts": "2026-11-14T17:05:00+00:00",
+            "cam_id": "cam_01",
+            "track_id": 3,
+            "score": 0.65,
+            "threshold": 0.586,
+            "clip_path": "data/clips/evt_3.mp4",
+        },
+    )
+    script_res = reset_all_events(
+        config_path=PROJECT_ROOT / "configs" / "default.yaml",
+        db_path_override=db_file,
+        clips_dir_override=clips_dir,
+        delete_clips=True,
+    )
+    assert script_res == {"deleted_events": 1, "deleted_clips": 1}
+
+
+def test_vn_timezone_and_video_tag_rendering(tmp_path: Path) -> None:
+    """Verify UTC+7 (Asia/Ho_Chi_Minh) timestamp conversion and <video controls preload=\"metadata\"> in UI."""
+    assert to_vn_iso("2026-11-14T17:00:00+00:00") == "2026-11-15T00:00:00+07:00"
+    assert to_vn_iso("2026-11-14T17:00:00Z") == "2026-11-15T00:00:00+07:00"
+    assert to_vn_iso().endswith("+07:00")
+
+    app = create_app(
+        config_path=PROJECT_ROOT / "configs" / "default.yaml",
+        db_path_override=tmp_path / "tz.db",
+        clips_dir_override=tmp_path / "clips",
+        audit_log_override=tmp_path / "audit.log",
+        start_mqtt=False,
+    )
+    client = TestClient(app)
+
+    html = client.get("/").text
+    assert '<video controls preload="metadata">' in html
+    assert "reset-events-modal" in html
+    assert "Xóa tất cả sự kiện" in html
+
+    client.post(
+        "/api/events",
+        json={
+            "event_id": "evt_tz_1",
+            "ts": "2026-11-14T17:00:00+00:00",
+            "cam_id": "cam_01",
+            "track_id": 1,
+            "score": 0.6527,
+            "threshold": 0.5863,
+            "clip_path": "data/clips/evt_tz_1.mp4",
+        },
+    )
+    ev = client.get("/api/events").json()["events"][0]
+    assert ev["ts"] == "2026-11-15T00:00:00+07:00"
+    st = client.get("/api/door/status").json()["door_status"]
+    assert st["ts"].endswith("+07:00")
+
 
 
 

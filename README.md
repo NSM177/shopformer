@@ -173,7 +173,7 @@ Mở **Terminal 3** — chọn 1 trong 2 luồng suy luận:
 - **Luồng A — VideoMAE + YOLO + ByteTrack (`demo_videomae.py`)**:
   ```powershell
   # Cắt clip 16 khung theo từng track_id (lề 15%) -> chấm điểm VideoMAE -> qua DecisionStateMachine -> gửi MQTT
-  .\.venv\Scripts\python.exe demo_videomae.py --ckpt models/videomae_shoplift --source 0 --broker localhost --port 1883
+  python demo_videomae.py --bundle models/videomae_bundle --source <video.mp4> --mqtt-host localhost --store-id store_01 --cam-id cam_01 --clips-dir data/clips --show
   ```
   *(Nếu muốn cắt clip từ video quay sẵn để làm dữ liệu huấn luyện cho `notebooks/train_videomae.ipynb`, dùng lệnh chung code)*:
   ```powershell

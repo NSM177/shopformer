@@ -1,0 +1,21 @@
+{
+    "num_frames": 16,
+    "size": 224,
+    "mean": [
+        0.485,
+        0.456,
+        0.406
+    ],
+    "std": [
+        0.229,
+        0.224,
+        0.225
+    ],
+    "clip_sec": 10.866666666666667,
+    "base": "MCG-NJU/videomae-base-finetuned-kinetics",
+    "classes": [
+        "normal",
+        "shoplifting"
+    ],
+    "note": "Cửa sổ suy luận phải dài xấp xỉ clip_sec và lấy num_frames khung đều nhau."
+}

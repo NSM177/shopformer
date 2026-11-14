@@ -7,6 +7,8 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from shoplift_iot.contracts import to_vn_iso
+
 VALID_DECISIONS = ("pending", "confirmed", "ignored")
 
 
@@ -58,7 +60,7 @@ class EventDatabase:
     def upsert_event(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Insert a newly received MQTT alert event into SQLite."""
         event_id = str(payload["event_id"])
-        ts = str(payload["ts"])
+        ts = to_vn_iso(str(payload["ts"]))
         cam_id = str(payload["cam_id"])
         track_id = int(payload["track_id"])
         score = float(payload["score"])
@@ -107,7 +109,7 @@ class EventDatabase:
         """Update human review decision ('confirmed' for Xác nhận, 'ignored' for Bỏ qua)."""
         if decision not in ("confirmed", "ignored"):
             raise ValueError(f"Decision must be 'confirmed' or 'ignored', got '{decision}'")
-        decided_at = datetime.now(timezone.utc).isoformat()
+        decided_at = to_vn_iso()
         with self._connect() as conn:
             cur = conn.execute(
                 """
@@ -122,6 +124,13 @@ class EventDatabase:
                 return None
         return self.get_event(event_id)
 
+    def clear_events(self) -> int:
+        """Delete all alert events from SQLite and return the number of deleted rows."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM events")
+            conn.commit()
+            return int(cur.rowcount or 0)
+
     def log_door_command(
         self,
         action: str,
@@ -132,7 +141,7 @@ class EventDatabase:
         ts: str | None = None,
     ) -> dict[str, Any]:
         """Record an admin door command in SQLite (`door_logs`) for audit compliance (Safety Constraint #4)."""
-        ts_val = ts or datetime.now(timezone.utc).isoformat()
+        ts_val = to_vn_iso(ts)
         with self._connect() as conn:
             cur = conn.execute(
                 """

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shopformer IoT Alert &amp; Door Control Dashboard</title>
+  <title>VideoMAE Shoplifting Alert &amp; Door Control Dashboard</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -50,6 +50,12 @@
       margin: 0;
       font-size: 1.5rem;
       color: var(--accent);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
 
     .notice {
@@ -178,10 +184,11 @@
       position: relative;
     }
 
-    .clip-box img {
+    .clip-box video {
       width: 100%;
       height: 100%;
       object-fit: contain;
+      background: #000;
     }
 
     .card-body {
@@ -272,6 +279,14 @@
       padding: 8px 16px;
     }
 
+    .btn-reset-events {
+      background: #7f1d1d;
+      border: 1px solid var(--danger);
+      color: #fecaca;
+      flex: none;
+      padding: 8px 14px;
+    }
+
     .empty {
       text-align: center;
       padding: 48px;
@@ -281,7 +296,7 @@
       border-radius: 10px;
     }
 
-    /* Confirmation Modal */
+    /* Confirmation Modals */
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -361,12 +376,15 @@
   <div class="container">
     <header>
       <div>
-        <h1>Shopformer — Bảng Giám sát Cảnh báo &amp; Điều khiển Cửa (IoT MQTT)</h1>
+        <h1>Hệ thống Cảnh báo Nghi Trộm (YOLO + VideoMAE) &amp; Điều khiển Cửa IoT</h1>
         <div style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">
-          Alert: <code>store/+/cam/+/alert</code> | Cửa: <code>store/+/door/cmd</code> &amp; <code>store/+/door/status</code>
+          Alert: <code>store/+/cam/+/alert</code> | Cửa: <code>store/+/door/cmd</code> &amp; <code>store/+/door/status</code> | Múi giờ: <code>Asia/Ho_Chi_Minh (UTC+7)</code>
         </div>
       </div>
-      <button class="btn-refresh" onclick="refreshAll()">Làm mới ngay</button>
+      <div class="header-actions">
+        <button class="btn-reset-events" id="btn-open-reset-modal" onclick="openResetEventsModal()">🗑️ Xóa tất cả sự kiện</button>
+        <button class="btn-refresh" onclick="refreshAll()">Làm mới ngay</button>
+      </div>
     </header>
 
     <div class="notice">
@@ -385,7 +403,7 @@
         </div>
         <div style="font-size: 0.88rem; color: var(--muted);">
           <div>Sự kiện gắn kèm: <code id="door-event-id">—</code> | TTL còn lại: <strong id="door-ttl-remaining">0s</strong></div>
-          <div style="margin-top: 3px;">Cập nhật: <span id="door-ts">—</span> | Camera: <span id="cam-status-text">online</span></div>
+          <div style="margin-top: 3px;">Cập nhật (UTC+7): <span id="door-ts">—</span> | Camera: <span id="cam-status-text">online</span></div>
         </div>
       </div>
       <div class="door-controls">
@@ -421,11 +439,11 @@
 
     <!-- Door Command Audit Logs -->
     <section class="audit-section">
-      <h3 style="margin: 0; font-size: 1.05rem; color: var(--accent);">Nhật ký Lệnh Cửa (Audit Log)</h3>
+      <h3 style="margin: 0; font-size: 1.05rem; color: var(--accent);">Nhật ký Lệnh Cửa (Audit Log — Asia/Ho_Chi_Minh UTC+7)</h3>
       <table class="audit-table">
         <thead>
           <tr>
-            <th>Thời gian (UTC)</th>
+            <th>Thời gian (UTC+7)</th>
             <th>Người phát lệnh</th>
             <th>Hành động</th>
             <th>Event ID</th>
@@ -466,8 +484,43 @@
     </div>
   </div>
 
+  <!-- Confirmation Modal for Resetting All Events (Hộp xác nhận Xóa tất cả sự kiện) -->
+  <div class="modal-backdrop" id="reset-events-modal" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title">
+    <div class="modal-box">
+      <h3 id="reset-modal-title">🗑️ Xác nhận Xóa tất cả sự kiện</h3>
+      <p style="font-size: 0.92rem; color: var(--muted); margin: 0 0 16px 0;">
+        Bạn có chắc chắn muốn xóa toàn bộ danh sách sự kiện cảnh báo trong SQLite (<code>data/events.db</code>) và các file clip đã lưu trong <code>data/clips/</code> không?
+      </p>
+      <div class="actions">
+        <button class="btn-confirm" id="btn-confirm-reset-events" onclick="confirmResetEvents()">Xác nhận Xóa tất cả</button>
+        <button class="btn-ignore" onclick="closeResetEventsModal()">Hủy</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let lastSignature = "";
+
+    function formatTimeVN(ts) {
+      if (!ts || ts === "—") return "—";
+      try {
+        const dt = new Date(ts);
+        if (isNaN(dt.getTime())) return ts;
+        const fmt = new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "Asia/Ho_Chi_Minh",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        }).format(dt);
+        return fmt.replace(" ", "T") + "+07:00";
+      } catch (e) {
+        return ts;
+      }
+    }
 
     function badgeHtml(decision) {
       if (decision === "confirmed") return '<span class="badge badge-confirmed">Đã xác nhận</span>';
@@ -489,6 +542,25 @@
 
     function closeLockModal() {
       document.getElementById("lock-confirm-modal").classList.remove("active");
+    }
+
+    function openResetEventsModal() {
+      document.getElementById("reset-events-modal").classList.add("active");
+    }
+
+    function closeResetEventsModal() {
+      document.getElementById("reset-events-modal").classList.remove("active");
+    }
+
+    async function confirmResetEvents() {
+      closeResetEventsModal();
+      const res = await fetch("/api/events?delete_clips=true", {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        lastSignature = "";
+        await fetchEvents(true);
+      }
     }
 
     async function confirmLockCommand() {
@@ -542,7 +614,7 @@
         }
         document.getElementById("door-event-id").textContent = st.event_id || "—";
         document.getElementById("door-ttl-remaining").textContent = `${data.remaining_ttl_sec || 0}s`;
-        document.getElementById("door-ts").textContent = st.ts || "—";
+        document.getElementById("door-ts").textContent = formatTimeVN(st.ts);
 
         const cams = data.cam_status || {};
         const camEntries = Object.entries(cams);
@@ -556,7 +628,7 @@
         } else {
           tbody.innerHTML = logs.slice(0, 8).map(l => `
             <tr>
-              <td>${l.ts}</td>
+              <td>${formatTimeVN(l.ts)}</td>
               <td><code>${l.actor}</code></td>
               <td><strong style="color: ${l.action === 'lock' ? '#f87171' : '#4ade80'};">${l.action.toUpperCase()}</strong></td>
               <td><code>${l.event_id}</code></td>
@@ -604,12 +676,15 @@
 
         const cards = events.map(ev => {
           const fname = clipFilename(ev.clip_path);
-          const mjpegUrl = `/api/clips/${encodeURIComponent(fname)}/mjpeg`;
+          const webmUrl = `/api/clips/${encodeURIComponent(fname)}/webm`;
           const mp4Url = `/clips/${encodeURIComponent(fname)}`;
           return `
             <div class="event-card" id="card-${ev.event_id}">
               <div class="clip-box">
-                <img src="${mjpegUrl}" alt="Clip ${ev.event_id}" />
+                <video controls preload="metadata">
+                  <source src="${webmUrl}" type="video/webm" />
+                  <source src="${mp4Url}" type="video/mp4" />
+                </video>
               </div>
               <div class="card-body">
                 <div class="row">
@@ -621,16 +696,16 @@
                   <span><code>${ev.cam_id}</code> &bull; ID <strong>#${ev.track_id}</strong></span>
                 </div>
                 <div class="row">
-                  <span style="color: var(--muted);">Điểm / Ngưỡng:</span>
+                  <span style="color: var(--muted);">Điểm VideoMAE (score / threshold):</span>
                   <span class="score-pill">${Number(ev.score).toFixed(4)} / ${Number(ev.threshold).toFixed(4)}</span>
                 </div>
                 <div class="row">
-                  <span style="color: var(--muted);">Thời gian:</span>
-                  <span style="font-size: 0.8rem;">${ev.ts}</span>
+                  <span style="color: var(--muted);">Thời gian (UTC+7):</span>
+                  <span style="font-size: 0.8rem;">${formatTimeVN(ev.ts)}</span>
                 </div>
                 <div class="row">
-                  <span style="color: var(--muted);">File clip:</span>
-                  <a href="${mp4Url}" target="_blank" style="color: var(--accent); font-size: 0.82rem;">${fname}</a>
+                  <span style="color: var(--muted);">Đường dẫn clip:</span>
+                  <a href="${mp4Url}" target="_blank" style="color: var(--accent); font-size: 0.82rem;">${ev.clip_path}</a>
                 </div>
                 <div class="actions">
                   <button class="btn-confirm" onclick="sendDecision('${ev.event_id}', 'confirmed')">Xác nhận</button>

@@ -33,6 +33,7 @@ clips/
 *.pt
 *.pth
 *.onnx
+*.safetensors
 
 # Environment variables & secrets
 .env

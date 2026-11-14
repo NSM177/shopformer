@@ -38,12 +38,14 @@ services:
       - scripts/fake_door.py
       - --config
       - configs/default.yaml
-      - --host
+      - --mqtt-host
       - mosquitto
-      - --port
+      - --mqtt-port
       - "1883"
       - --store-id
       - ${STORE_ID:-store_01}
+    healthcheck:
+      disable: true
     environment:
       - MQTT_BROKER_HOST=mosquitto
       - MQTT_BROKER_PORT=1883

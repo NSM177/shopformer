@@ -20,16 +20,24 @@ from typing import Any
 import cv2
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+def _find_project_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for candidate in (here, here.parent, here.parent.parent, here.parent.parent.parent):
+        if (candidate / "src" / "shoplift_iot").is_dir():
+            return candidate
+    return here
+
+
+PROJECT_ROOT = _find_project_root()
+HERE_DIR = Path(__file__).resolve().parent
 SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+for _p in (str(HERE_DIR), str(SRC_DIR), str(PROJECT_ROOT)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from shoplift_iot.alerting.state_machine import DecisionState, DecisionStateMachine  # noqa: E402
 from shoplift_iot.config import load_app_config  # noqa: E402
-from shoplift_iot.contracts import AlertEvent  # noqa: E402
+from shoplift_iot.contracts import AlertEvent, PersonPose  # noqa: E402
 from shoplift_iot.vision.person_clips import (  # noqa: E402
     PersonClipBuffer,
     PersonClipExtractor,
@@ -38,7 +46,10 @@ from shoplift_iot.vision.person_clips import (  # noqa: E402
     save_person_clip_mp4,
 )
 from shoplift_iot.vision.pose_track import load_tracker_from_config  # noqa: E402
-from videomae_lite import Predictor  # noqa: E402
+try:
+    from shoplift_iot.model.videomae_lite import Predictor  # noqa: E402
+except ImportError:
+    from videomae_lite import Predictor  # noqa: E402
 
 
 def make_mqtt(args: Any, state_machine: DecisionStateMachine | None = None) -> Any | None:
@@ -137,6 +148,23 @@ def run_videomae_demo(
     eff_clips_dir = Path(clips_dir or cfg.resolve_path(cfg.paths.get("clips_dir", "data/clips")))
     eff_clips_dir.mkdir(parents=True, exist_ok=True)
 
+    src = int(source) if (isinstance(source, str) and source.isdigit()) else source
+    live = isinstance(src, int) or str(src).startswith(("rtsp://", "http://", "https://"))
+    cap = cv2.VideoCapture(src if not isinstance(src, Path) else str(src))
+    if not cap.isOpened():
+        raise SystemExit(f"Không mở được nguồn video: {source}")
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or cfg.video.get("target_fps", 15.0))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    eff_min_span = float(pc_cfg.get("min_span_ratio", 0.8))
+    if not live and total_frames > 0 and fps > 0:
+        video_sec = total_frames / fps
+        if video_sec < eff_clip_sec:
+            # Giữ gần trọn độ dài clip hành động (92%) và đánh giá từ 60% thời lượng để đủ K cửa sổ liên tiếp
+            eff_clip_sec = max(0.8, round(video_sec * 0.92, 2))
+            eff_min_span = 0.60
+            if hop_sec is None:
+                eff_hop = max(0.15, round((video_sec * 0.32) / max(1, eff_k), 2))
+
     tracker = load_tracker_from_config(cfg, yolo_instance=yolo_instance)
     clip_buf = PersonClipBuffer(
         clip_sec=eff_clip_sec,
@@ -144,8 +172,8 @@ def run_videomae_demo(
         n_frames=eff_n_frames,
         size=eff_size,
         margin_ratio=float(pc_cfg.get("margin_ratio", 0.15)),
-        min_span_ratio=float(pc_cfg.get("min_span_ratio", 0.8)),
-        min_frames=int(pc_cfg.get("min_frames", 8)),
+        min_span_ratio=eff_min_span,
+        min_frames=min(int(pc_cfg.get("min_frames", 8)), max(4, total_frames // 3)) if (not live and total_frames > 0) else int(pc_cfg.get("min_frames", 8)),
         stale_sec=float(pc_cfg.get("stale_sec", 5.0)),
     )
     extractor = PersonClipExtractor(tracker=tracker, clip_buffer=clip_buf)
@@ -161,16 +189,9 @@ def run_videomae_demo(
     )
 
     print(
-        f"[model] thiết bị {getattr(pred, 'device', 'cpu')} | cửa sổ {eff_clip_sec:.1f}s, "
+        f"[model] thiết bị {getattr(pred, 'device', 'cpu')} | cửa sổ {eff_clip_sec:.2f}s (hop {eff_hop:.2f}s), "
         f"{eff_n_frames} khung | ngưỡng {thr:.3f} | K={eff_k} | auto_lock={sm.auto_lock}"
     )
-
-    src = int(source) if (isinstance(source, str) and source.isdigit()) else source
-    live = isinstance(src, int) or str(src).startswith(("rtsp://", "http://", "https://"))
-    cap = cv2.VideoCapture(src if not isinstance(src, Path) else str(src))
-    if not cap.isOpened():
-        raise SystemExit(f"Không mở được nguồn video: {source}")
-    fps = float(cap.get(cv2.CAP_PROP_FPS) or cfg.video.get("target_fps", 15.0))
 
     mqtt_args = argparse.Namespace(
         no_mqtt=no_mqtt,
@@ -198,7 +219,18 @@ def run_videomae_demo(
         idx += 1
         sm.tick(t)
 
-        poses, windows = extractor.process_frame(t, frame)
+        poses = extractor.tracker.process_frame(frame)
+        if not poses:
+            fh, fw = frame.shape[:2]
+            poses = [
+                PersonPose(
+                    track_id=1,
+                    bbox_xywh=np.array([fw / 2.0, fh / 2.0, float(fw), float(fh)], dtype=np.float32),
+                    keypoints_xyc=np.zeros((17, 3), dtype=np.float32),
+                    score=1.0,
+                )
+            ]
+        windows = extractor.clip_buffer.update(t, frame, poses)
         for win in windows:
             p_score = float(pred.predict(win.frames_rgb))
             last_scores[win.track_id] = p_score
@@ -227,13 +259,15 @@ def run_videomae_demo(
                 msg = out.alert_event.to_dict()
                 print(f"  >>> CẢNH BÁO nghi vấn: {msg}")
                 if client is not None:
-                    client.publish(alert_topic, json.dumps(msg, ensure_ascii=False), qos=1)
+                    pub_info = client.publish(alert_topic, json.dumps(msg, ensure_ascii=False), qos=1)
+                    pub_info.wait_for_publish(timeout=3.0)
                 if out.auto_door_cmd is not None and client is not None:
-                    client.publish(
+                    cmd_info = client.publish(
                         door_cmd_topic,
                         json.dumps(out.auto_door_cmd.to_dict(), ensure_ascii=False),
                         qos=1,
                     )
+                    cmd_info.wait_for_publish(timeout=3.0)
 
         if show:
             vis = frame.copy()
@@ -263,7 +297,8 @@ def run_videomae_demo(
     if show:
         cv2.destroyAllWindows()
     if client is not None:
-        client.publish(f"store/{eff_store}/cam/{eff_cam}/status", "offline", qos=1, retain=True)
+        off_info = client.publish(f"store/{eff_store}/cam/{eff_cam}/status", "offline", qos=1, retain=True)
+        off_info.wait_for_publish(timeout=2.0)
         client.loop_stop()
         client.disconnect()
     print(f"Xong. Số cảnh báo: {len(emitted_alerts)}")

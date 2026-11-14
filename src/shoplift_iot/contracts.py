@@ -3,11 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import uuid
 
 import numpy as np
+
+# Múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7)
+VN_TZ = timezone(timedelta(hours=7), name="Asia/Ho_Chi_Minh")
+
+
+def to_vn_iso(ts: str | datetime | None = None) -> str:
+    """Chuẩn hóa thời gian sang định dạng ISO-8601 múi giờ Asia/Ho_Chi_Minh (+07:00)."""
+    if ts is None or ts == "":
+        return datetime.now(VN_TZ).isoformat(timespec="seconds")
+    if isinstance(ts, datetime):
+        dt = ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
+        return dt.astimezone(VN_TZ).isoformat(timespec="seconds")
+    raw = str(ts).strip()
+    try:
+        norm = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        dt = datetime.fromisoformat(norm)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=VN_TZ)
+        else:
+            dt = dt.astimezone(VN_TZ)
+        return dt.isoformat(timespec="seconds")
+    except Exception:
+        return raw
 
 
 @dataclass(slots=True)
@@ -85,10 +108,10 @@ class AlertEvent:
         event_id: str | None = None,
         ts: str | None = None,
     ) -> AlertEvent:
-        """Create an AlertEvent with a standard UUID4 `event_id` and ISO-8601 UTC timestamp."""
+        """Create an AlertEvent with a standard UUID4 `event_id` and ISO-8601 UTC+7 timestamp."""
         return cls(
             event_id=event_id or str(uuid.uuid4()),
-            ts=ts or datetime.now(timezone.utc).isoformat(),
+            ts=to_vn_iso(ts),
             cam_id=str(cam_id),
             track_id=int(track_id),
             score=float(score),
@@ -149,10 +172,10 @@ class DoorStatus:
 
     @classmethod
     def create(cls, state: str, event_id: str = "", ts: str | None = None) -> DoorStatus:
-        """Create a DoorStatus with ISO-8601 UTC timestamp."""
+        """Create a DoorStatus with ISO-8601 Asia/Ho_Chi_Minh (+07:00) timestamp."""
         return cls(
             state=state,
-            ts=ts or datetime.now(timezone.utc).isoformat(),
+            ts=to_vn_iso(ts),
             event_id=str(event_id),
         )
 

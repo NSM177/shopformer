@@ -38,8 +38,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Giả lập bộ điều khiển cửa từ ESP32 qua MQTT.")
     parser.add_argument("--config", type=Path, default=Path("configs/default.yaml"), help="File cấu hình YAML.")
     parser.add_argument("--store-id", type=str, default=None, help="Ghi đè store_id.")
-    parser.add_argument("--mqtt-host", type=str, default=None, help="Ghi đè địa chỉ MQTT broker.")
-    parser.add_argument("--mqtt-port", type=int, default=None, help="Ghi đè cổng MQTT broker.")
+    parser.add_argument("--mqtt-host", "--host", dest="mqtt_host", type=str, default=None, help="Ghi đè địa chỉ MQTT broker.")
+    parser.add_argument("--mqtt-port", "--port", dest="mqtt_port", type=int, default=None, help="Ghi đè cổng MQTT broker.")
     parser.add_argument("--duration", type=float, default=None, help="Số giây chạy thử (mặc định chạy vô hạn).")
     args = parser.parse_args()
 
@@ -89,3 +89,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
