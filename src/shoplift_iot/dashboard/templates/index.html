@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shopformer IoT Alert Dashboard</title>
+  <title>Shopformer IoT Alert &amp; Door Control Dashboard</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -60,6 +60,72 @@
       border-radius: 8px;
       font-size: 0.9rem;
       margin-bottom: 18px;
+    }
+
+    /* Door Control Panel */
+    .door-panel {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .door-status-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .door-badge {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .door-unlocked {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid var(--success);
+      color: #4ade80;
+    }
+
+    .door-locked {
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+    }
+
+    .door-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-door-unlock {
+      background: var(--success);
+      color: #052e16;
+      font-weight: 700;
+      padding: 10px 18px;
+      flex: none;
+    }
+
+    .btn-door-lock {
+      background: var(--danger);
+      color: #fff;
+      font-weight: 700;
+      padding: 10px 18px;
+      flex: none;
     }
 
     .stats {
@@ -165,8 +231,9 @@
 
     .actions {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       margin-top: 8px;
+      flex-wrap: wrap;
     }
 
     button {
@@ -193,6 +260,11 @@
       color: #fff;
     }
 
+    .btn-lock-card {
+      background: var(--warning);
+      color: #0f172a;
+    }
+
     .btn-refresh {
       background: var(--accent);
       color: #0f172a;
@@ -208,6 +280,80 @@
       border: 1px dashed var(--border);
       border-radius: 10px;
     }
+
+    /* Confirmation Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.8);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--danger);
+      border-radius: 12px;
+      max-width: 460px;
+      width: 100%;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-box h3 {
+      margin: 0 0 10px 0;
+      color: #fca5a5;
+    }
+
+    .modal-field {
+      margin: 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+
+    .modal-field input {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .audit-section {
+      margin-top: 28px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+
+    .audit-table th,
+    .audit-table td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .audit-table th {
+      color: var(--muted);
+    }
   </style>
 </head>
 
@@ -215,19 +361,42 @@
   <div class="container">
     <header>
       <div>
-        <h1>Shopformer — Bảng Giám sát Cảnh báo Bất thường (IoT MQTT)</h1>
+        <h1>Shopformer — Bảng Giám sát Cảnh báo &amp; Điều khiển Cửa (IoT MQTT)</h1>
         <div style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">
-          Topic: <code>store/+/cam/+/alert</code> | Lưu nhãn phản hồi vào SQLite (<code>data/events.db</code>)
+          Alert: <code>store/+/cam/+/alert</code> | Cửa: <code>store/+/door/cmd</code> &amp; <code>store/+/door/status</code>
         </div>
       </div>
-      <button class="btn-refresh" onclick="fetchEvents(true)">Làm mới ngay</button>
+      <button class="btn-refresh" onclick="refreshAll()">Làm mới ngay</button>
     </header>
 
     <div class="notice">
-      <strong>Lưu ý đạo đức &amp; quyền riêng tư:</strong> Hệ thống chỉ <em>cảnh báo hành vi bất thường</em> dựa trên
-      chuỗi khung xương người (17 khớp COCO) để nhân viên xem xét. Không kết luận trộm cắp, không nhận diện khuôn mặt,
-      không lưu video thô dài hạn.
+      <strong>Ràng buộc An toàn &amp; Đạo đức:</strong>
+      (1) <code>auto_lock = false</code> — Chỉ Admin mới được phát lệnh khóa cửa qua hộp xác nhận.
+      (2) Lệnh khóa luôn có thời hạn <code>ttl_sec</code> (mặc định 45s) và tự mở khi hết hạn; nút <strong>Mở cửa</strong> luôn được ưu tiên cao nhất.
+      (3) Fail-safe: Mất kết nối MQTT hoặc lỗi phần mềm thì cửa tự động về trạng thái <strong>MỞ (UNLOCKED)</strong>.
+      (4) Không nhận diện khuôn mặt, chỉ dùng <code>track_id</code> tạm thời.
     </div>
+
+    <!-- Real-time Door Status & Control Panel -->
+    <section class="door-panel" aria-label="Điều khiển cửa ra vào">
+      <div class="door-status-box">
+        <div id="door-state-badge" class="door-badge door-unlocked">
+          🔓 CỬA ĐANG MỞ (UNLOCKED)
+        </div>
+        <div style="font-size: 0.88rem; color: var(--muted);">
+          <div>Sự kiện gắn kèm: <code id="door-event-id">—</code> | TTL còn lại: <strong id="door-ttl-remaining">0s</strong></div>
+          <div style="margin-top: 3px;">Cập nhật: <span id="door-ts">—</span> | Camera: <span id="cam-status-text">online</span></div>
+        </div>
+      </div>
+      <div class="door-controls">
+        <button class="btn-door-unlock" id="btn-unlock-door" onclick="sendUnlockCommand('manual_dashboard')">
+          🔓 Mở cửa ngay (Ưu tiên)
+        </button>
+        <button class="btn-door-lock" id="btn-open-lock-modal" onclick="openLockModal('manual_dashboard')">
+          🔒 Khóa cửa (Có xác nhận)
+        </button>
+      </div>
+    </section>
 
     <div class="stats">
       <div class="stat-box">
@@ -249,6 +418,52 @@
     </div>
 
     <div id="events-container"></div>
+
+    <!-- Door Command Audit Logs -->
+    <section class="audit-section">
+      <h3 style="margin: 0; font-size: 1.05rem; color: var(--accent);">Nhật ký Lệnh Cửa (Audit Log)</h3>
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Thời gian (UTC)</th>
+            <th>Người phát lệnh</th>
+            <th>Hành động</th>
+            <th>Event ID</th>
+            <th>TTL (giây)</th>
+            <th>Lý do</th>
+          </tr>
+        </thead>
+        <tbody id="door-logs-body">
+          <tr><td colspan="6" style="color: var(--muted);">Chưa có lệnh cửa nào.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Confirmation Modal for Locking Door (Hộp xác nhận Khóa cửa) -->
+  <div class="modal-backdrop" id="lock-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="lock-modal-title">
+    <div class="modal-box">
+      <h3 id="lock-modal-title">⚠️ Xác nhận Khóa cửa Tạm thời</h3>
+      <p style="font-size: 0.9rem; color: var(--muted); margin: 0 0 12px 0;">
+        Cửa sẽ tự động mở lại khi hết thời hạn TTL hoặc ngay khi bạn bấm <strong>Mở cửa ngay</strong>.
+      </p>
+      <div class="modal-field">
+        <label for="lock-event-id-input">Mã sự kiện (<code>event_id</code>):</label>
+        <input type="text" id="lock-event-id-input" value="manual_dashboard" />
+      </div>
+      <div class="modal-field">
+        <label for="lock-ttl-input">Thời hạn khóa <code>ttl_sec</code> (giây, mặc định 45s):</label>
+        <input type="number" id="lock-ttl-input" value="45" min="5" max="120" />
+      </div>
+      <div class="modal-field">
+        <label for="lock-reason-input">Lý do khóa:</label>
+        <input type="text" id="lock-reason-input" value="admin_dashboard:confirm_lock" />
+      </div>
+      <div class="actions" style="margin-top: 16px;">
+        <button class="btn-confirm" id="btn-confirm-lock-submit" onclick="confirmLockCommand()">Xác nhận Khóa cửa</button>
+        <button class="btn-ignore" onclick="closeLockModal()">Hủy</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -264,6 +479,95 @@
       if (!clipPath) return "";
       const parts = clipPath.replace(/\\/g, "/").split("/");
       return parts[parts.length - 1];
+    }
+
+    function openLockModal(eventId) {
+      document.getElementById("lock-event-id-input").value = eventId || "manual_dashboard";
+      document.getElementById("lock-ttl-input").value = 45;
+      document.getElementById("lock-confirm-modal").classList.add("active");
+    }
+
+    function closeLockModal() {
+      document.getElementById("lock-confirm-modal").classList.remove("active");
+    }
+
+    async function confirmLockCommand() {
+      const eventId = document.getElementById("lock-event-id-input").value.trim() || "manual_dashboard";
+      const ttlSec = parseInt(document.getElementById("lock-ttl-input").value, 10) || 45;
+      const reason = document.getElementById("lock-reason-input").value.trim() || "admin_dashboard:confirm_lock";
+
+      closeLockModal();
+      await fetch("/api/door/cmd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "lock",
+          reason: reason,
+          event_id: eventId,
+          ttl_sec: ttlSec,
+          actor: "admin_dashboard"
+        })
+      });
+      await fetchDoorStatus();
+    }
+
+    async function sendUnlockCommand(eventId) {
+      await fetch("/api/door/cmd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "unlock",
+          reason: "admin_dashboard:priority_unlock",
+          event_id: eventId || "manual_dashboard",
+          ttl_sec: 0,
+          actor: "admin_dashboard"
+        })
+      });
+      await fetchDoorStatus();
+    }
+
+    async function fetchDoorStatus() {
+      try {
+        const res = await fetch("/api/door/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data.door_status || { state: "unlocked", ts: "—", event_id: "" };
+        const badge = document.getElementById("door-state-badge");
+        if (st.state === "locked") {
+          badge.className = "door-badge door-locked";
+          badge.textContent = "🔒 CỬA ĐANG KHÓA (LOCKED)";
+        } else {
+          badge.className = "door-badge door-unlocked";
+          badge.textContent = "🔓 CỬA ĐANG MỞ (UNLOCKED)";
+        }
+        document.getElementById("door-event-id").textContent = st.event_id || "—";
+        document.getElementById("door-ttl-remaining").textContent = `${data.remaining_ttl_sec || 0}s`;
+        document.getElementById("door-ts").textContent = st.ts || "—";
+
+        const cams = data.cam_status || {};
+        const camEntries = Object.entries(cams);
+        document.getElementById("cam-status-text").textContent =
+          camEntries.length > 0 ? camEntries.map(([k, v]) => `${k}: ${v}`).join(", ") : "sẵn sàng";
+
+        const logs = data.logs || [];
+        const tbody = document.getElementById("door-logs-body");
+        if (logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted);">Chưa có lệnh cửa nào.</td></tr>';
+        } else {
+          tbody.innerHTML = logs.slice(0, 8).map(l => `
+            <tr>
+              <td>${l.ts}</td>
+              <td><code>${l.actor}</code></td>
+              <td><strong style="color: ${l.action === 'lock' ? '#f87171' : '#4ade80'};">${l.action.toUpperCase()}</strong></td>
+              <td><code>${l.event_id}</code></td>
+              <td>${l.ttl_sec}s</td>
+              <td>${l.reason}</td>
+            </tr>
+          `).join("");
+        }
+      } catch (err) {
+        console.error("Failed to fetch door status:", err);
+      }
     }
 
     async function sendDecision(eventId, decision) {
@@ -317,7 +621,7 @@
                   <span><code>${ev.cam_id}</code> &bull; ID <strong>#${ev.track_id}</strong></span>
                 </div>
                 <div class="row">
-                  <span style="color: var(--muted);">Điểm MSE / Ngưỡng:</span>
+                  <span style="color: var(--muted);">Điểm / Ngưỡng:</span>
                   <span class="score-pill">${Number(ev.score).toFixed(4)} / ${Number(ev.threshold).toFixed(4)}</span>
                 </div>
                 <div class="row">
@@ -331,6 +635,7 @@
                 <div class="actions">
                   <button class="btn-confirm" onclick="sendDecision('${ev.event_id}', 'confirmed')">Xác nhận</button>
                   <button class="btn-ignore" onclick="sendDecision('${ev.event_id}', 'ignored')">Bỏ qua</button>
+                  <button class="btn-lock-card" onclick="openLockModal('${ev.event_id}')">🔒 Khóa cửa (45s)</button>
                 </div>
               </div>
             </div>
@@ -342,8 +647,16 @@
       }
     }
 
-    fetchEvents(true);
-    setInterval(() => fetchEvents(false), 2500);
+    function refreshAll() {
+      fetchEvents(true);
+      fetchDoorStatus();
+    }
+
+    refreshAll();
+    setInterval(() => {
+      fetchEvents(false);
+      fetchDoorStatus();
+    }, 2000);
   </script>
 </body>
 

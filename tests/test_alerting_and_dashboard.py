@@ -19,6 +19,7 @@ from shoplift_iot.alerting.alerting import AlertManager  # noqa: E402
 from shoplift_iot.dashboard.app import create_app  # noqa: E402
 from shoplift_iot.main import run_pipeline  # noqa: E402
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher, REQUIRED_KEYS  # noqa: E402
+from shoplift_iot.messaging.telegram_bot import TelegramAlertBot  # noqa: E402
 
 
 def test_alert_manager_k_consecutive_and_cooldown(tmp_path: Path) -> None:
@@ -154,4 +155,191 @@ def test_main_pipeline_emits_alert_on_poselift_clip() -> None:
     assert len(events) >= 1
     first_clip = PROJECT_ROOT / events[0].clip_path
     assert first_clip.exists() and first_clip.stat().st_size > 0
+
+
+def test_dashboard_door_control_and_audit_log(tmp_path: Path) -> None:
+    """Verify GD6 door status/command endpoints, confirmation modal HTML, unlock priority, and audit logs."""
+    db_file = tmp_path / "events_door.db"
+    clips_dir = tmp_path / "clips"
+    audit_log = tmp_path / "door_audit.log"
+
+    app = create_app(
+        config_path=PROJECT_ROOT / "configs" / "default.yaml",
+        db_path_override=db_file,
+        clips_dir_override=clips_dir,
+        audit_log_override=audit_log,
+        start_mqtt=False,
+    )
+    client = TestClient(app)
+
+    # 1. HTML includes confirmation modal and Lock/Unlock controls
+    res_html = client.get("/")
+    assert res_html.status_code == 200
+    assert "lock-confirm-modal" in res_html.text
+    assert "Xác nhận Khóa cửa" in res_html.text
+    assert "Mở cửa ngay" in res_html.text
+
+    # 2. Initial door status is fail-safe UNLOCKED and auto_lock is False
+    res_st = client.get("/api/door/status")
+    assert res_st.status_code == 200
+    st_json = res_st.json()
+    assert st_json["door_status"]["state"] == "unlocked"
+    assert st_json["auto_lock"] is False
+    assert st_json["default_ttl_sec"] == 45
+
+    # 3. Admin issues LOCK command with TTL=45s
+    res_lock = client.post(
+        "/api/door/cmd",
+        json={
+            "action": "lock",
+            "reason": "admin_dashboard:confirm_lock",
+            "event_id": "evt_door_01",
+            "ttl_sec": 45,
+            "actor": "admin_dashboard",
+        },
+    )
+    assert res_lock.status_code == 200
+    lock_data = res_lock.json()
+    assert lock_data["door_status"]["state"] == "locked"
+    assert lock_data["door_status"]["event_id"] == "evt_door_01"
+    assert lock_data["command"] == {
+        "action": "lock",
+        "reason": "admin_dashboard:confirm_lock",
+        "event_id": "evt_door_01",
+        "ttl_sec": 45,
+    }
+    assert len(app.state.subscriber.published_door_commands) == 1
+
+    # 4. Admin issues priority UNLOCK command -> immediately unlocked
+    res_unlock = client.post(
+        "/api/door/cmd",
+        json={
+            "action": "unlock",
+            "reason": "admin_dashboard:priority_unlock",
+            "event_id": "evt_door_01",
+            "ttl_sec": 0,
+            "actor": "admin_dashboard",
+        },
+    )
+    assert res_unlock.status_code == 200
+    assert res_unlock.json()["door_status"]["state"] == "unlocked"
+
+    # 5. Check SQLite door_logs and file audit_log both have 2 entries
+    res_st_after = client.get("/api/door/status").json()
+    assert len(res_st_after["logs"]) == 2
+    assert res_st_after["logs"][0]["action"] == "unlock"
+    assert res_st_after["logs"][1]["action"] == "lock"
+    assert audit_log.exists()
+    assert len(audit_log.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+    # 6. Invalid action or non-positive ttl_sec for lock returns 400
+    assert client.post("/api/door/cmd", json={"action": "invalid"}).status_code == 400
+    assert client.post("/api/door/cmd", json={"action": "lock", "ttl_sec": 0}).status_code == 400
+
+
+def test_mqtt_subscriber_door_and_cam_status_sync(tmp_path: Path) -> None:
+    """Verify MQTTEventSubscriber updates real-time door_status and cam_status from MQTT messages."""
+    import json
+
+    app = create_app(
+        config_path=PROJECT_ROOT / "configs" / "default.yaml",
+        db_path_override=tmp_path / "sync.db",
+        clips_dir_override=tmp_path / "clips",
+        audit_log_override=tmp_path / "audit.log",
+        start_mqtt=False,
+    )
+    sub = app.state.subscriber
+
+    class DummyMsg:
+        def __init__(self, topic: str, payload: bytes) -> None:
+            self.topic = topic
+            self.payload = payload
+
+    sub._on_message(
+        None,
+        None,
+        DummyMsg(
+            "store/store_01/door/status",
+            json.dumps({"state": "locked", "ts": "2026-11-14T10:00:00+00:00", "event_id": "evt_99"}).encode("utf-8"),
+        ),
+    )
+    sub._on_message(
+        None,
+        None,
+        DummyMsg("store/store_01/cam/cam_01/status", b"online"),
+    )
+
+    client = TestClient(app)
+    data = client.get("/api/door/status").json()
+    assert data["door_status"]["state"] == "locked"
+    assert data["door_status"]["event_id"] == "evt_99"
+    assert data["cam_status"]["cam_01"] == "online"
+
+
+def test_telegram_bot_alert_and_admin_commands(tmp_path: Path, monkeypatch) -> None:
+    """Verify TelegramAlertBot env-var reading, alert formatting, and authorized `/lock` & `/unlock` commands."""
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    disabled_bot = TelegramAlertBot()
+    assert not disabled_bot.is_enabled
+    assert not disabled_bot.send_alert({"event_id": "evt_1"})
+
+    sent_payloads: list[dict] = []
+    emitted_cmds: list[tuple] = []
+    audit_path = tmp_path / "tg_audit.log"
+
+    bot = TelegramAlertBot(
+        bot_token="123456:TEST_TOKEN",
+        chat_id="998877",
+        default_ttl_sec=45,
+        audit_log_path=audit_path,
+        on_door_command=lambda cmd, actor: emitted_cmds.append((cmd, actor)),
+        http_sender=lambda method, payload: sent_payloads.append({"method": method, "payload": payload}) or {"ok": True},
+    )
+    assert bot.is_enabled
+
+    ok = bot.send_alert(
+        {
+            "event_id": "evt_tg_01",
+            "ts": "2026-11-14T10:05:00+00:00",
+            "cam_id": "cam_01",
+            "track_id": 4,
+            "score": 0.88,
+            "threshold": 0.50,
+            "clip_path": "data/clips/evt_tg_01.mp4",
+        }
+    )
+    assert ok
+    assert len(sent_payloads) == 1
+    assert "/lock evt_tg_01 45" in sent_payloads[0]["payload"]["text"]
+
+    # Unauthorized chat_id MUST be rejected (Safety Constraint #1)
+    unauth = bot.handle_update(
+        {"message": {"chat": {"id": "000000"}, "from": {"username": "stranger"}, "text": "/lock evt_tg_01 45"}}
+    )
+    assert unauth is None
+    assert len(emitted_cmds) == 0
+
+    # Authorized admin chat_id issues /lock evt_tg_01 60
+    cmd_lock = bot.handle_update(
+        {"message": {"chat": {"id": "998877"}, "from": {"username": "admin_user"}, "text": "/lock evt_tg_01 60"}}
+    )
+    assert cmd_lock is not None
+    assert cmd_lock.to_dict() == {
+        "action": "lock",
+        "reason": "admin_telegram:lock",
+        "event_id": "evt_tg_01",
+        "ttl_sec": 60,
+    }
+
+    # Authorized admin chat_id issues /unlock
+    cmd_unlock = bot.handle_update(
+        {"message": {"chat": {"id": "998877"}, "from": {"username": "admin_user"}, "text": "/unlock evt_tg_01"}}
+    )
+    assert cmd_unlock is not None
+    assert cmd_unlock.action == "unlock"
+    assert len(emitted_cmds) == 2
+    assert audit_path.exists()
+
 

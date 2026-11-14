@@ -1,4 +1,4 @@
-"""FastAPI web dashboard and background MQTT subscriber for anomaly alerts."""
+"""FastAPI web dashboard, door command/status bridge, and background MQTT subscriber for anomaly alerts."""
 
 from __future__ import annotations
 
@@ -18,9 +18,12 @@ import paho.mqtt.client as mqtt
 from pydantic import BaseModel
 import uvicorn
 
+from shoplift_iot.actuators.door_controller import DoorController
 from shoplift_iot.config import PROJECT_ROOT, AppConfig, load_app_config
+from shoplift_iot.contracts import DoorCommand, DoorStatus
 from shoplift_iot.dashboard.db import EventDatabase
 from shoplift_iot.messaging.mqtt_pub import MQTTPublisher
+from shoplift_iot.messaging.telegram_bot import TelegramAlertBot
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "index.html"
 
@@ -43,20 +46,47 @@ class EventCreateRequest(BaseModel):
     clip_path: str
 
 
+class DoorCommandRequest(BaseModel):
+    """Request body for issuing a lock/unlock door command from Admin Dashboard."""
+
+    action: str  # "lock" | "unlock"
+    reason: str = "admin_dashboard"
+    event_id: str = ""
+    ttl_sec: int = 45
+    actor: str = "admin_dashboard"
+
+
 class MQTTEventSubscriber:
-    """Background MQTT subscriber listening on `store/+/cam/+/alert` and saving to SQLite."""
+    """Background MQTT bridge listening for alerts, door status, and camera status, and publishing `door/cmd`."""
 
     def __init__(
         self,
         db: EventDatabase,
         broker_host: str = "localhost",
         broker_port: int = 1883,
+        store_id: str = "store_01",
         topic_filter: str = "store/+/cam/+/alert",
+        door_status_filter: str = "store/+/door/status",
+        cam_status_filter: str = "store/+/cam/+/status",
+        door_cmd_topic_template: str = "store/{store_id}/door/cmd",
+        telegram_bot: TelegramAlertBot | None = None,
+        clips_dir: Path | None = None,
     ) -> None:
         self.db = db
         self.broker_host = broker_host
         self.broker_port = int(broker_port)
+        self.store_id = str(store_id)
         self.topic_filter = topic_filter
+        self.door_status_filter = door_status_filter
+        self.cam_status_filter = cam_status_filter
+        self.door_cmd_topic = door_cmd_topic_template.format(store_id=self.store_id)
+        self.telegram_bot = telegram_bot
+        self.clips_dir = clips_dir
+
+        self.door_status: dict[str, Any] = DoorStatus.create(state="unlocked", event_id="").to_dict()
+        self.cam_status: dict[str, str] = {}
+        self.published_door_commands: list[dict[str, Any]] = []
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
@@ -71,6 +101,8 @@ class MQTTEventSubscriber:
         properties: Any = None,
     ) -> None:
         client.subscribe(self.topic_filter, qos=1)
+        client.subscribe(self.door_status_filter, qos=1)
+        client.subscribe(self.cam_status_filter, qos=1)
 
     def _on_message(
         self,
@@ -78,12 +110,53 @@ class MQTTEventSubscriber:
         userdata: Any,
         msg: mqtt.MQTTMessage,
     ) -> None:
+        topic = str(msg.topic or "")
         try:
-            payload = json.loads(msg.payload.decode("utf-8"))
+            raw_text = msg.payload.decode("utf-8").strip()
+            if topic.endswith("/door/status"):
+                data = json.loads(raw_text)
+                status = DoorStatus(
+                    state=str(data.get("state", "unlocked")),
+                    ts=str(data.get("ts", "")),
+                    event_id=str(data.get("event_id", "")),
+                )
+                self.door_status = status.to_dict()
+                return
+
+            if topic.endswith("/status") and "/cam/" in topic:
+                parts = topic.split("/")
+                cam_id = parts[3] if len(parts) >= 4 else "cam_01"
+                state_val = raw_text.strip('"').lower()
+                if state_val in ("online", "offline"):
+                    self.cam_status[cam_id] = state_val
+                return
+
+            payload = json.loads(raw_text)
             clean = MQTTPublisher.validate_payload(payload)
-            self.db.upsert_event(clean)
+            saved = self.db.upsert_event(clean)
+            if self.telegram_bot is not None and self.telegram_bot.is_enabled:
+                clip_file = None
+                if self.clips_dir is not None and saved.get("clip_path"):
+                    clip_file = self.clips_dir / Path(str(saved["clip_path"])).name
+                self.telegram_bot.send_alert(saved, clip_file=clip_file)
         except Exception as exc:
-            print(f"[MQTTEventSubscriber] Invalid message on {msg.topic}: {exc}")
+            print(f"[MQTTEventSubscriber] Invalid message on {topic}: {exc}")
+
+    def publish_door_command(self, cmd: DoorCommand) -> dict[str, Any]:
+        """Publish `DoorCommand` JSON to `store/{store_id}/door/cmd` with QoS 1."""
+        payload_dict = cmd.to_dict()
+        self.published_door_commands.append(payload_dict)
+        if self._running:
+            try:
+                self._client.publish(
+                    self.door_cmd_topic,
+                    payload=json.dumps(payload_dict, ensure_ascii=False),
+                    qos=1,
+                    retain=False,
+                )
+            except Exception as exc:
+                print(f"[MQTTEventSubscriber] Warning: Failed to publish door/cmd ({exc})")
+        return payload_dict
 
     def start(self) -> bool:
         """Connect to broker and start background network loop."""
@@ -146,6 +219,7 @@ def create_app(
     config_path: Path | str | AppConfig | Mapping[str, Any] | None = None,
     db_path_override: Path | None = None,
     clips_dir_override: Path | None = None,
+    audit_log_override: Path | None = None,
     start_mqtt: bool = True,
 ) -> FastAPI:
     """Create and configure the FastAPI dashboard application."""
@@ -155,16 +229,68 @@ def create_app(
     clips_dir = clips_dir_override or cfg.resolve_path(cfg.paths["clips_dir"])
     clips_dir.mkdir(parents=True, exist_ok=True)
 
+    door_cfg = cfg.door
+    audit_log_path = audit_log_override or cfg.resolve_path(
+        door_cfg.get("audit_log_path", "data/door_audit.log")
+    )
+    default_ttl_sec = int(door_cfg.get("default_ttl_sec", 45))
+    max_ttl_sec = int(door_cfg.get("max_ttl_sec", 120))
+    auto_lock = bool(cfg.alerting.get("auto_lock", False))
+
     broker_host = os.environ.get("MQTT_BROKER_HOST", str(cfg.mqtt["broker_host"]))
     broker_port = int(os.environ.get("MQTT_BROKER_PORT", cfg.mqtt["broker_port"]))
+    store_id = os.environ.get("STORE_ID", str(cfg.mqtt.get("store_id", "store_01")))
 
     db = EventDatabase(db_path)
+
+    # Local fail-safe DoorController mirror for TTL enforcement, audit logging, and offline/test mode
+    door_controller = DoorController(
+        store_id=store_id,
+        broker_host=broker_host,
+        broker_port=broker_port,
+        default_ttl_sec=default_ttl_sec,
+        max_ttl_sec=max_ttl_sec,
+        audit_log_path=audit_log_path,
+        auto_connect=False,
+    )
+
+    telegram_bot = TelegramAlertBot(
+        default_ttl_sec=default_ttl_sec,
+        max_ttl_sec=max_ttl_sec,
+        audit_log_path=audit_log_path,
+    )
+
     subscriber = MQTTEventSubscriber(
         db=db,
         broker_host=broker_host,
         broker_port=broker_port,
+        store_id=store_id,
         topic_filter="store/+/cam/+/alert",
+        telegram_bot=telegram_bot,
+        clips_dir=clips_dir,
     )
+
+    def _execute_door_command(cmd: DoorCommand, actor: str = "admin_dashboard") -> dict[str, Any]:
+        log_row = db.log_door_command(
+            action=cmd.action,
+            reason=cmd.reason,
+            event_id=cmd.event_id,
+            ttl_sec=cmd.ttl_sec,
+            actor=actor,
+        )
+        raw_cmd = cmd.to_dict()
+        raw_cmd["actor"] = actor
+        status = door_controller.handle_command(raw_cmd)
+        subscriber.door_status = status.to_dict()
+        subscriber.publish_door_command(cmd)
+        return {
+            "command": cmd.to_dict(),
+            "door_status": subscriber.door_status,
+            "remaining_ttl_sec": round(door_controller.remaining_ttl(), 1),
+            "log": log_row,
+        }
+
+    telegram_bot.on_door_command = _execute_door_command
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -179,6 +305,8 @@ def create_app(
     app.state.db = db
     app.state.clips_dir = clips_dir
     app.state.subscriber = subscriber
+    app.state.door_controller = door_controller
+    app.state.telegram_bot = telegram_bot
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
@@ -192,6 +320,9 @@ def create_app(
     @app.post("/api/events")
     def create_event(req: EventCreateRequest) -> dict[str, Any]:
         saved = db.upsert_event(req.model_dump())
+        if telegram_bot.is_enabled:
+            clip_file = clips_dir / Path(str(saved["clip_path"])).name
+            telegram_bot.send_alert(saved, clip_file=clip_file)
         return {"event": saved}
 
     @app.post("/api/events/{event_id}/decision")
@@ -202,6 +333,46 @@ def create_app(
         if updated is None:
             raise HTTPException(status_code=404, detail=f"Event '{event_id}' not found")
         return {"event": updated}
+
+    @app.get("/api/door/status")
+    def get_door_status(limit_logs: int = 20) -> dict[str, Any]:
+        expired = door_controller.tick()
+        if expired is not None:
+            subscriber.door_status = expired.to_dict()
+        return {
+            "door_status": subscriber.door_status,
+            "remaining_ttl_sec": round(door_controller.remaining_ttl(), 1),
+            "cam_status": subscriber.cam_status,
+            "default_ttl_sec": default_ttl_sec,
+            "max_ttl_sec": max_ttl_sec,
+            "auto_lock": auto_lock,
+            "logs": db.list_door_logs(limit=limit_logs),
+        }
+
+    @app.post("/api/door/cmd")
+    def send_door_command(req: DoorCommandRequest) -> dict[str, Any]:
+        action = str(req.action or "").strip().lower()
+        if action not in ("lock", "unlock"):
+            raise HTTPException(status_code=400, detail="Action must be 'lock' or 'unlock'")
+
+        ttl_sec = int(req.ttl_sec) if action == "lock" else 0
+        if action == "lock":
+            if ttl_sec <= 0:
+                raise HTTPException(status_code=400, detail="ttl_sec must be positive for 'lock'")
+            ttl_sec = min(ttl_sec, max_ttl_sec)
+
+        cmd = DoorCommand(
+            action=action,
+            reason=str(req.reason or f"admin_dashboard:{action}"),
+            event_id=str(req.event_id or "manual_dashboard"),
+            ttl_sec=ttl_sec if action == "lock" else 1,
+        )
+        # For unlock, preserve ttl_sec=0 in MQTT JSON contract
+        if action == "unlock":
+            object.__setattr__(cmd, "ttl_sec", 0)
+
+        actor = str(req.actor or "admin_dashboard")
+        return _execute_door_command(cmd, actor=actor)
 
     @app.get("/clips/{clip_name}")
     def get_clip_file(clip_name: str) -> FileResponse:
@@ -241,4 +412,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

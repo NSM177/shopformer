@@ -40,6 +40,19 @@ class EventDatabase:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS door_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    ttl_sec INTEGER NOT NULL
+                )
+                """
+            )
             conn.commit()
 
     def upsert_event(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -108,4 +121,46 @@ class EventDatabase:
             if cur.rowcount == 0:
                 return None
         return self.get_event(event_id)
+
+    def log_door_command(
+        self,
+        action: str,
+        reason: str,
+        event_id: str,
+        ttl_sec: int,
+        actor: str = "admin_dashboard",
+        ts: str | None = None,
+    ) -> dict[str, Any]:
+        """Record an admin door command in SQLite (`door_logs`) for audit compliance (Safety Constraint #4)."""
+        ts_val = ts or datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO door_logs (ts, actor, action, reason, event_id, ttl_sec)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (ts_val, str(actor), str(action), str(reason), str(event_id), int(ttl_sec)),
+            )
+            conn.commit()
+            row_id = cur.lastrowid
+            row = conn.execute("SELECT * FROM door_logs WHERE id = ?", (row_id,)).fetchone()
+        return dict(row) if row is not None else {
+            "id": row_id,
+            "ts": ts_val,
+            "actor": str(actor),
+            "action": str(action),
+            "reason": str(reason),
+            "event_id": str(event_id),
+            "ttl_sec": int(ttl_sec),
+        }
+
+    def list_door_logs(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List recent door command audit logs ordered newest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM door_logs ORDER BY id DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
 
