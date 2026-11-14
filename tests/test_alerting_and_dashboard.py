@@ -343,3 +343,26 @@ def test_telegram_bot_alert_and_admin_commands(tmp_path: Path, monkeypatch) -> N
     assert audit_path.exists()
 
 
+def test_gd7_docker_compose_and_readme_contracts() -> None:
+    """Verify GD7 docker-compose.yml defines all 4 services and README documents safety constraints."""
+    import yaml
+
+    compose_path = PROJECT_ROOT / "docker-compose.yml"
+    assert compose_path.exists()
+    compose_data = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    services = compose_data.get("services", {})
+    for required_service in ("mosquitto", "dashboard", "fake_door", "pipeline"):
+        assert required_service in services, f"Missing '{required_service}' in docker-compose.yml"
+
+    assert (PROJECT_ROOT / "docker" / "Dockerfile.dashboard").exists()
+    assert (PROJECT_ROOT / "docker" / "Dockerfile.pipeline").exists()
+
+    readme_text = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "store/{store_id}/cam/{cam_id}/alert" in readme_text
+    assert "store/{store_id}/door/cmd" in readme_text
+    assert "store/{store_id}/door/status" in readme_text
+    assert "auto_lock" in readme_text
+    assert "ttl_sec" in readme_text
+
+
+

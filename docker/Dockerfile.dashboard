@@ -4,7 +4,7 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src:/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
@@ -23,9 +23,11 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /app/data/clips
 
 COPY configs/ /app/configs/
+COPY scripts/fake_door.py /app/scripts/fake_door.py
 COPY src/shoplift_iot/__init__.py /app/src/shoplift_iot/__init__.py
 COPY src/shoplift_iot/config.py /app/src/shoplift_iot/config.py
 COPY src/shoplift_iot/contracts.py /app/src/shoplift_iot/contracts.py
+COPY src/shoplift_iot/actuators/ /app/src/shoplift_iot/actuators/
 COPY src/shoplift_iot/model/__init__.py /app/src/shoplift_iot/model/__init__.py
 COPY src/shoplift_iot/model/bundle.py /app/src/shoplift_iot/model/bundle.py
 COPY src/shoplift_iot/alerting/ /app/src/shoplift_iot/alerting/

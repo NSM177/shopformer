@@ -18,6 +18,9 @@ services:
     environment:
       - MQTT_BROKER_HOST=mosquitto
       - MQTT_BROKER_PORT=1883
+      - STORE_ID=${STORE_ID:-store_01}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs:ro
@@ -25,3 +28,51 @@ services:
       - mosquitto
     restart: unless-stopped
 
+  fake_door:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: shopformer-fake-door
+    command:
+      - python
+      - scripts/fake_door.py
+      - --config
+      - configs/default.yaml
+      - --host
+      - mosquitto
+      - --port
+      - "1883"
+      - --store-id
+      - ${STORE_ID:-store_01}
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - STORE_ID=${STORE_ID:-store_01}
+    volumes:
+      - ./data:/app/data
+      - ./configs:/app/configs:ro
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  pipeline:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pipeline
+    container_name: shopformer-pipeline
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - STORE_ID=${STORE_ID:-store_01}
+      - CAM_ID=${CAM_ID:-cam_01}
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - ./configs:/app/configs:ro
+      - ./third_party:/app/third_party:ro
+      - ./models:/app/models:ro
+    depends_on:
+      - mosquitto
+      - dashboard
+      - fake_door
+    restart: "no"

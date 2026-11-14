@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src:/app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml /app/pyproject.toml
+COPY src/ /app/src/
+COPY scripts/ /app/scripts/
+COPY configs/ /app/configs/
+COPY videomae_lite.py /app/videomae_lite.py
+COPY demo_videomae.py /app/demo_videomae.py
+
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch \
+    torchvision \
+    && pip install --no-cache-dir -e .
+
+RUN mkdir -p /app/data/clips
+
+CMD ["python", "-m", "shoplift_iot.main", "--config", "configs/default.yaml", "--source", "third_party/PoseLift/Samples/Hiding an item in their pants.mp4", "--max-frames", "45"]

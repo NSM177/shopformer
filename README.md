@@ -1,203 +1,205 @@
-# Hệ thống Demo Phát hiện Hành vi Bất thường trong Siêu thị dựa trên Khung xương Người & Cảnh báo IoT Thời gian thực (Shopformer + PoseLift)
+# Hệ thống Camera Phát hiện Hành vi Nghi Trộm, Cảnh báo Admin & Điều khiển Khóa Cửa An toàn (YOLO + ByteTrack + VideoMAE / Shopformer + MQTT + ESP32)
 
-> **Lưu ý Đạo đức & Quyền riêng tư**:
-> Hệ thống này là **bản demo học thuật** phục vụ đồ án môn học. Hệ thống **chỉ phát CẢNH BÁO "hành vi bất thường"** dựa trên chuỗi khung xương người (17 khớp xương COCO) để nhân viên vận hành xem xét:
-> - **Không** tự động kết luận một người là "ăn trộm".
-> - **Không** sử dụng nhận diện khuôn mặt hay đặc trưng sinh trắc học định danh.
-> - **Không** lưu trữ video thô dài hạn (chỉ trích xuất khung xương và lưu đoạn clip ngắn ~5 giây quanh thời điểm phát sinh cảnh báo để người duyệt kiểm chứng).
+> **Lưu ý Đạo đức, Quyền riêng tư & Phạm vi Sử dụng**:
+> Đây là **đồ án demo học thuật ở trường**, không sử dụng cho mục đích thương mại (tuân thủ giấy phép phi thương mại **CC BY-NC 4.0** của bộ dữ liệu PoseLift).
+> - Hệ thống **chỉ phát CẢNH BÁO "hành vi nghi ngờ"** để nhân viên/admin xem xét video clip ngắn và tự quyết định.
+> - **Không** tự động khóa cửa (`auto_lock: false`), **không** nhận diện khuôn mặt hay định danh cá nhân (chỉ dùng `track_id` tạm thời từ ByteTrack).
 
 ---
 
-## 1. Kiến trúc Hệ thống
-
-Hệ thống kết hợp mô hình học sâu không giám sát trên đồ thị – chuỗi thời gian (**Shopformer**: *ST-GCN Autoencoder Tokenizer + Transformer Encoder-Decoder*) với luồng truyền thông IoT (**MQTT Mosquitto + FastAPI Web Dashboard + SQLite**).
+## 1. Kiến trúc Hệ thống & Luồng Hoạt động
 
 ```mermaid
 flowchart LR
-    subgraph Edge["Luồng Suy luận Thời gian thực (src/main.py)"]
-        S1["1. VideoSource\n(15 FPS)"] --> S2["2. YOLOv8-pose\n(17 khớp COCO)"]
-        S2 --> S3["3. ByteTrack\n(Gán Track ID)"]
-        S3 --> S4["4. PoseBuffer\n(Cửa sổ trượt 12 khung/ID)"]
-        S4 --> S5["5. PosePreprocessor\n(Nội suy, Làm mượt 8 khung,\nChuẩn hóa Shopformer 17->18)"]
-        S5 --> S6["6. ShopformerScorer\n(GCAE Tokenizer + Transformer\n-> Điểm bất thường MSE)"]
-        S6 --> S7["7. AlertManager\n(Làm mượt điểm, K=3 liên tiếp,\nCooldown 10s, Lưu clip 5s)"]
-        S7 --> S8["8. MQTTPublisher\n(JSON Payload)"]
+    subgraph Edge["1. Luồng Camera & AI (demo_videomae.py / shoplift_iot.main)"]
+        C1["Camera / Video"] --> C2["YOLO + ByteTrack\n(person_clips.py: cắt người + lề 15%,\nbuffer 16 khung 224x224)"]
+        C2 --> C3["VideoMAE Predictor\n(hoặc Shopformer Scorer)"]
+        C3 --> C4["DecisionStateMachine\n(IDLE -> SUSPECT -> ALERT ->\nWAIT_ADMIN -> LOCKED -> RELEASED)"]
     end
 
-    subgraph IoT["Hạ tầng IoT & Giám sát (docker-compose.yml)"]
-        B[("Mosquitto Broker\nstore/{store_id}/cam/{cam_id}/alert")]
-        D["FastAPI Dashboard\n(MQTT Subscriber + Web UI)"]
-        DB[("SQLite (data/events.db)\nNhãn: Xác nhận / Bỏ qua")]
+    subgraph Broker["2. MQTT Broker (Mosquitto)"]
+        T1[("store/{store_id}/cam/{cam_id}/alert\nstore/{store_id}/cam/{cam_id}/status\nstore/{store_id}/door/cmd\nstore/{store_id}/door/status")]
     end
 
-    S8 -- "MQTT QoS 1" --> B
-    B -- "Subscribe" --> D
-    D <--> DB
+    subgraph Admin["3. Giám sát & Xác nhận (FastAPI Dashboard / Telegram)"]
+        D1["Web Dashboard (cổng 8000)\n+ Hộp xác nhận Khóa cửa\n+ Nút Mở cửa Ưu tiên"]
+        D2["SQLite (data/events.db)\n+ Audit Log (data/door_audit.log)"]
+        TG["Telegram Bot (Tùy chọn)\n/lock <event_id> 45 | /unlock"]
+    end
+
+    subgraph Actuator["4. Chấp hành Cửa (DoorController)"]
+        E1["scripts/fake_door.py\n(Giả lập ESP32 trên Console)"]
+        E2["firmware/esp32_door/\n(Vi điều khiển ESP32 + Relay)"]
+    end
+
+    C4 -- "Publish Alert (QoS 1)\n& Status (Retained/LWT)" --> T1
+    T1 -- "Subscribe Alert & Door Status" --> D1
+    D1 <--> D2
+    D1 -. "Thông báo & Lệnh" .-> TG
+    D1 -- "Publish door/cmd (QoS 1)" --> T1
+    T1 -- "Subscribe door/cmd" --> E1
+    T1 -- "Subscribe door/cmd" --> E2
+    E1 -- "Publish door/status (Retained)" --> T1
+    E2 -- "Publish door/status (Retained)" --> T1
 ```
 
-### Cấu trúc Thư mục
+---
+
+## 2. Hợp đồng MQTT & 5 Ràng buộc An toàn Bắt buộc
+
+### 2.1. Hợp đồng MQTT (Giữ nguyên tên Topic & Trường JSON)
+
+| Topic | Payload JSON / Chuỗi | QoS / Retain | Mô tả |
+| :--- | :--- | :---: | :--- |
+| `store/{store_id}/cam/{cam_id}/alert` | `{"event_id", "ts", "cam_id", "track_id", "score", "threshold", "clip_path"}` | `QoS 1`, `retain=False` | Cảnh báo kèm đường dẫn clip khi vượt ngưỡng `K` cửa sổ liên tiếp |
+| `store/{store_id}/cam/{cam_id}/status` | `"online"` \| `"offline"` | `QoS 1`, `retain=True` (Last Will) | Trạng thái kết nối của node camera |
+| `store/{store_id}/door/cmd` | `{"action": "lock"\|"unlock", "reason", "event_id", "ttl_sec"}` | `QoS 1`, `retain=False` | Lệnh khóa/mở cửa do Admin phát từ Dashboard hoặc Telegram |
+| `store/{store_id}/door/status` | `{"state": "locked"\|"unlocked", "ts", "event_id"}` | `QoS 1`, `retain=True` (Last Will) | Trạng thái thực tế của cửa do `DoorController` / `ESP32` báo về |
+
+### 2.2. Năm Ràng buộc An toàn (Safety Constraints)
+
+1. **Chỉ Admin mới được khóa cửa (`auto_lock = false`)**:
+   - Trong [`configs/default.yaml`](file:///e:/Shopformer/configs/default.yaml), cờ `alerting.auto_lock` mặc định là `false`. Khi phát hiện nghi vấn, máy trạng thái dừng ở `WAIT_ADMIN` (hết `wait_admin_seconds = 30s` không có lệnh sẽ tự về `IDLE`).
+   - Trên Dashboard, bấm **Khóa cửa** bắt buộc phải qua **Hộp xác nhận (`#lock-confirm-modal`)**. Trên Telegram, chỉ `TELEGRAM_CHAT_ID` của Admin mới được phép gửi lệnh `/lock`.
+2. **Bắt buộc có thời hạn `ttl_sec` (mặc định 45 giây) & Ưu tiên Mở cửa (`unlock`)**:
+   - Mọi lệnh `lock` đều có thời hạn `ttl_sec` (mặc định `45s`, tối đa `120s`). Hết thời hạn, `DoorController` và firmware ESP32 tự động mở khóa (`unlocked`) và báo lại `door/status`.
+   - Nút **`🔓 Mở cửa ngay (Ưu tiên)`** luôn hiển thị nổi bật trên Dashboard; lệnh `unlock` luôn ghi đè và xóa bộ đếm khóa ngay lập tức ở mọi trạng thái.
+3. **Fail-safe (An toàn khi sự cố)**:
+   - Khi mất kết nối WiFi/MQTT, mất nguồn, hoặc xảy ra lỗi phần mềm/JSON không hợp lệ, `DoorController` và firmware ESP32 lập tức đưa cửa về trạng thái **`"unlocked"` (MỞ)** (kèm bản tin MQTT Last Will `"unlocked"`).
+4. **Ghi nhận Nhật ký Kiểm toán (Audit Log)**:
+   - Mọi lệnh cửa và chuyển đổi trạng thái đều được ghi vào [`data/door_audit.log`](file:///e:/Shopformer/configs/default.yaml#L97) (JSON Lines) và bảng `door_logs` trong SQLite (`data/events.db`) với đầy đủ: thời gian `ts`, người phát `actor`, `action`, `reason`, `event_id`, `ttl_sec`.
+5. **Bảo vệ Quyền riêng tư**:
+   - Không nhận diện khuôn mặt, không định danh người, chỉ sử dụng `track_id` tạm thời của ByteTrack trong phiên làm việc.
+
+---
+
+## 3. Cấu trúc Thư mục Dự án
+
 ```text
 Shopformer/
 ├── configs/
-│   ├── default.yaml          # Cấu hình tập trung toàn hệ thống (không hard-code đường dẫn)
-│   └── mosquitto.conf        # Cấu hình Mosquitto MQTT Broker
-├── checkpoints/
-│   ├── gcae_best.pt          # Trọng số Giai đoạn 1 (ST-GCN Graph Autoencoder Tokenizer)
-│   ├── shopformer_best.pt    # Trọng số Giai đoạn 2 (Transformer Encoder-Decoder)
-│   ├── eval_metrics.json     # Kết quả đo AUC-ROC, AUC-PR, EER trên tập test PoseLift
-│   └── threshold.json        # Thống kê phân vị điểm bất thường trên tập bình thường
-├── data/
-│   ├── PoseLift/             # Bộ dữ liệu PoseLift (pose/train, pose/test, gt/test_frame_mask)
-│   ├── clips/                # Các đoạn video ngắn (~5 giây) lưu tự động quanh sự kiện
-│   └── events.db             # Cơ sở dữ liệu SQLite lưu sự kiện & nhãn phản hồi của người duyệt
-├── third_party/
-│   ├── Shopformer/           # Mã nguồn gốc của bài báo Shopformer (GCAE + Transformer)
-│   └── PoseLift/             # Repo PoseLift kèm 3 video mẫu hành vi bất thường
-├── src/
-│   ├── source.py             # Bước 1: Đọc camera/video, hạ tốc độ khung hình về 15 FPS
-│   ├── pose_track.py         # Bước 2 & 3: YOLOv8-pose (COCO17) + ByteTrack theo dõi đa đối tượng
-│   ├── buffer.py             # Bước 4: Bộ đệm cửa sổ trượt 12 khung hình theo từng Track ID
-│   ├── preprocess.py         # Bước 5: Nội suy tuyến tính, làm mượt 8 khung, chuẩn hóa COCO18
-│   ├── scorer.py             # Bước 6: Bọc mô hình Shopformer, trả sai số tái tạo MSE
-│   ├── alerting.py           # Bước 7: Làm mượt điểm, kiểm tra K=3 cửa sổ liên tiếp, cooldown, lưu clip
-│   ├── mqtt_pub.py           # Bước 8: Phát bản tin JSON cảnh báo qua MQTT
-│   ├── main.py               # Kết nối toàn bộ luồng Bước 1–8
-│   └── dashboard/            # Subscriber MQTT + Giao diện Web FastAPI + SQLite
-│       ├── app.py
-│       ├── db.py
-│       └── templates/index.html
+│   ├── default.yaml                  # Cấu hình tập trung (paths, person_clips, alerting, door, mqtt, dashboard)
+│   └── mosquitto.conf                # Cấu hình Mosquitto MQTT Broker
+├── src/shoplift_iot/
+│   ├── contracts.py                  # Hợp đồng dữ liệu: AlertEvent, DoorCommand, DoorStatus
+│   ├── config.py                     # Đọc cấu hình YAML + biến môi trường
+│   ├── vision/
+│   │   ├── person_clips.py           # GD2: YOLO + ByteTrack cắt vùng người (+15% lề), xuất 16 khung 224x224
+│   │   ├── pose_track.py             # YOLOv8-pose + ByteTrack cho nhánh khung xương
+│   │   └── preprocess.py             # Chuẩn hóa chuỗi khung xương COCO17 -> COCO18
+│   ├── alerting/
+│   │   ├── state_machine.py          # GD4: Máy trạng thái IDLE->SUSPECT->ALERT->WAIT_ADMIN->LOCKED->RELEASED
+│   │   └── alerting.py               # Quản lý cảnh báo và trích xuất clip sự kiện
+│   ├── actuators/
+│   │   └── door_controller.py        # GD5: Bộ điều khiển cửa fail-safe, đếm ngược TTL, ghi audit log
+│   ├── messaging/
+│   │   ├── mqtt_pub.py               # Publish cảnh báo MQTT QoS 1 & trạng thái camera (retained + Last Will)
+│   │   └── telegram_bot.py           # GD6: Bot Telegram tùy chọn (gửi cảnh báo, nhận lệnh /lock & /unlock)
+│   ├── dashboard/
+│   │   ├── app.py                    # GD6: FastAPI server + MQTT bridge (alert, door/status, door/cmd)
+│   │   ├── db.py                     # SQLite lưu bảng events và bảng door_logs
+│   │   └── templates/index.html      # Giao diện Web: danh sách clip, trạng thái cửa, hộp xác nhận khóa cửa
+│   └── main.py                       # Pipeline suy luận đa luồng
 ├── scripts/
-│   ├── download_poselift.py  # Tải bộ dữ liệu PoseLift từ Google Drive chính thức
-│   ├── extract_poses.py      # Trích xuất khung xương từ video (dùng chung code Bước 1–5)
-│   ├── train_shopformer.py   # Huấn luyện 2 giai đoạn của Shopformer trên chuỗi pose bình thường
-│   ├── evaluate.py           # Đánh giá AUC-ROC, AUC-PR, EER trên tập test PoseLift
-│   └── calibrate_threshold.py# Hiệu chỉnh ngưỡng theo phân vị (mặc định P99) trên tập bình thường
-├── tests/                    # Bộ kiểm thử đơn vị & tích hợp (pytest) cho từng giai đoạn
-│   ├── test_stage_b.py
-│   ├── test_stage_c.py
-│   ├── test_stage_d.py
-│   └── test_stage_e.py
-├── Dockerfile.dashboard
-├── docker-compose.yml
-└── README.md
+│   ├── extract_person_clips.py       # GD2: Cắt clip từng người offline từ video quay sẵn để tạo tập train VideoMAE
+│   ├── fake_door.py                  # GD5: Script giả lập cửa ESP32 chạy trên terminal
+│   ├── evaluate.py                   # Đánh giá AUC-ROC, AUC-PR, EER trên tập PoseLift
+│   └── calibrate_threshold.py        # Hiệu chỉnh ngưỡng cảnh báo
+├── firmware/esp32_door/
+│   ├── esp32_door.ino                # GD5: Firmware Arduino/PlatformIO cho ESP32 thật (fail-safe + TTL)
+│   └── platformio.ini                # Cấu hình build PlatformIO
+├── notebooks/
+│   ├── train_videomae.ipynb          # Notebook fine-tune VideoMAE (2 lớp: normal / shoplifting)
+│   └── train_shopformer.ipynb        # Notebook huấn luyện Shopformer trên PoseLift (Colab / Kaggle)
+├── videomae_lite.py                  # Predictor VideoMAE đọc clip 16 khung hình 224x224
+├── demo_videomae.py                  # GD4: Vòng lặp thời gian thực nối person_clips + VideoMAE + DecisionStateMachine + MQTT
+├── tests/                            # Bộ kiểm thử tự động pytest (86 bài test)
+│   ├── test_person_clips.py          # Test GD2 (bbox +15% lề, buffer 16 khung, cắt clip offline)
+│   ├── test_state_machine_and_demo.py# Test GD4 (chuyển trạng thái, K liên tiếp, cooldown, timeout WAIT_ADMIN, ưu tiên unlock)
+│   ├── test_door_controller.py       # Test GD5 (DoorController, TTL tự mở, fail-safe mất MQTT, audit log, firmware)
+│   ├── test_alerting_and_dashboard.py# Test GD6 (Dashboard API, hộp xác nhận khóa cửa, Telegram bot, hợp đồng JSON)
+│   ├── test_capture_and_vision.py
+│   ├── test_model_and_eval.py
+│   └── test_scorer_and_bundle.py
+├── docker/
+│   ├── Dockerfile.dashboard          # Container image cho Dashboard và fake_door
+│   └── Dockerfile.pipeline           # Container image cho Pipeline suy luận
+└── docker-compose.yml                # GD7: mosquitto + dashboard + fake_door + pipeline
 ```
 
 ---
 
-## 2. Dữ liệu Sử dụng & Tiền xử lý
+## 4. Hướng dẫn Chạy Demo Từng Bước
 
-1. **Bộ dữ liệu PoseLift** (*WACV 2025 / CVPRW 2025*):
-   - **Tập huấn luyện (`data/PoseLift/pose/train`)**: `104` file JSON chứa các chuỗi khung xương hoàn toàn **bình thường** trong siêu thị (`12,268` cửa sổ 12 khung hình với `stride=6`).
-   - **Tập kiểm thử (`data/PoseLift/pose/test`)**: `47` file JSON chứa cả hành vi bình thường và bất thường (`3,607` cửa sổ với `stride=1`), đi kèm `47` file nhãn mặt nạ từng khung hình (`0` = bình thường, `1` = bất thường) tại `data/PoseLift/gt/test_frame_mask`.
-2. **Đồng bộ Chuẩn hóa giữa Huấn luyện & Suy luận**:
-   - Nội suy tuyến tính các khung hình hoặc khớp xương bị khuyết (cho phép khuyết tối đa 2 khung trong cửa sổ 12 khung).
-   - Làm mượt tọa độ `(X, Y)` theo thời gian bằng cửa sổ trượt 8 khung hình (`uniform_filter1d(size=8)`).
-   - Chuyển đổi 17 khớp `COCO17` sang 18 khớp `OpenPose COCO18` (thêm khớp cổ `neck = 0.5 * (left_shoulder + right_shoulder)`).
-   - Chuẩn hóa tọa độ theo đúng công thức của Shopformer: chia cho độ phân giải khung hình `[W, H]`, trừ tâm trung bình của cửa sổ và chia cho độ lệch chuẩn theo trục dọc `std(Y)`.
+### Cách 1: Chạy trọn bộ bằng Docker Compose (`mosquitto + dashboard + fake_door + pipeline`)
+
+```powershell
+# Khởi động cả 4 dịch vụ (Mosquitto Broker, Web Dashboard, Fake Door ESP32, và Pipeline)
+docker compose up --build
+```
+- **Dashboard Web**: Mở trình duyệt tại **`http://localhost:8000`**
+- **Quan sát trạng thái cửa giả lập**: Xem log của container `shopformer-fake-door` (`docker logs -f shopformer-fake-door`).
 
 ---
 
-## 3. Kết quả Thực nghiệm trên Tập Test PoseLift
+### Cách 2: Chạy Từng Thành phần trên Máy Local (Phục vụ Demo & Giải thích từng bước khi Bảo vệ)
 
-Chạy lệnh `.\.venv\Scripts\python.exe scripts/evaluate.py` trên toàn bộ 47 video test của PoseLift với bộ trọng số tại `checkpoints/`:
+#### Bước 1: Kiểm tra toàn bộ bộ test tự động (`pytest`)
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
 
-| Chỉ số đánh giá (Metric) | Kết quả đo thực tế (`evaluate.py`) | Kết quả trong bài báo Shopformer (CVPRW 2025) | Ghi chú |
-| :--- | :---: | :---: | :--- |
-| **AUC-ROC (%)** $\uparrow$ | **74.33** | 69.15 | Diện tích dưới đường cong ROC |
-| **AUC-PR (%)** $\uparrow$ | **49.13** | 44.49 | Diện tích dưới đường cong Precision-Recall |
-| **EER** $\downarrow$ | **0.3315** | 0.38 | Tỷ lệ lỗi cân bằng (Equal Error Rate — thấp hơn là tốt hơn) |
-| **EER Threshold** | `0.223634` | — | Ngưỡng MSE tại điểm EER trên tập test |
+#### Bước 2: Khởi động MQTT Broker (nếu chưa bật Mosquitto) & Web Dashboard
+Mở **Terminal 1** — chạy Web Dashboard:
+```powershell
+# Tùy chọn: đặt biến môi trường nếu muốn bật thêm Bot Telegram
+# $env:TELEGRAM_BOT_TOKEN="123456:ABCDEF..."
+# $env:TELEGRAM_CHAT_ID="987654321"
 
-> **Giải thích kỹ thuật về kết quả**: Trong mã nguồn gốc của repo `PoseLift`/`Shopformer`, hàm đọc khung hình `pose_utils.py` sắp xếp khóa số thứ tự frame dưới dạng chuỗi ký tự (`sorted(single_person.keys())` khiến `'10'` đứng trước `'7'`, làm xáo trộn thứ tự thời gian) và thứ tự cột trong JSON gốc là `[Y, X, C]`. Khi chúng ta sửa lại sắp xếp số nguyên `key=lambda x: int(float(x))` và đồng bộ thứ tự `[X, Y, C]`, tính liên tục thời gian của cửa sổ 12 khung hình được bảo toàn đúng bản chất vật lý, giúp các chỉ số `AUC-ROC`, `AUC-PR` và `EER` đều cải thiện so với số liệu công bố ban đầu.
+.\.venv\Scripts\python.exe -m shoplift_iot.dashboard.app --config configs/default.yaml --port 8000
+```
+Mở trình duyệt truy cập **`http://localhost:8000`**.
 
-### Phân bố Điểm trên Tập Bình thường (`scripts/calibrate_threshold.py`)
-- Trên `12,268` cửa sổ bình thường của `PoseLift/pose/train`:
-  - `P50 (Trung vị)`: `0.2176`
-  - `P90`: `1.1676`
-  - `P95`: `4.0879`
-  - `P99`: `36.7493` (do ~1% chuỗi khung xương thô trong tập train bị che khuất gần hết cơ thể khiến `std(Y)` xấp xỉ `0`, làm biên độ sau chuẩn hóa tăng vọt).
-- Trên các chuỗi khung xương người đi bộ/đứng bình thường trích xuất qua pipeline YOLOv8-pose + làm mượt 8 khung (`data/extracted_samples/demo_rgb_people.mp4`), điểm MSE nằm trong khoảng `0.1700 – 0.2576`. Do đó, ngưỡng vận hành mặc định cho luồng cảnh báo thời gian thực trong [`configs/default.yaml`](file:///e:/Shopformer/configs/default.yaml) được đặt là `default_threshold: 0.30` (nằm trên mức dao động bình thường `0.2576`, đồng thời bắt nhạy các chuỗi hành vi bất thường có điểm MSE từ `0.42 – 1.91`).
+#### Bước 3: Khởi động Bộ Giả lập Cửa ESP32 (`fake_door.py`)
+Mở **Terminal 2** — chạy script giả lập cửa ra vào:
+```powershell
+.\.venv\Scripts\python.exe scripts/fake_door.py --config configs/default.yaml
+```
+- Terminal sẽ hiển thị trạng thái ban đầu: `🔓 [DOOR UNLOCKED (MỞ)] | state=unlocked` (Fail-safe mặc định luôn mở).
+
+#### Bước 4: Chạy Luồng Phát hiện Nghi Trộm & Phát Cảnh báo MQTT
+Mở **Terminal 3** — chọn 1 trong 2 luồng suy luận:
+
+- **Luồng A — VideoMAE + YOLO + ByteTrack (`demo_videomae.py`)**:
+  ```powershell
+  # Cắt clip 16 khung theo từng track_id (lề 15%) -> chấm điểm VideoMAE -> qua DecisionStateMachine -> gửi MQTT
+  .\.venv\Scripts\python.exe demo_videomae.py --ckpt models/videomae_shoplift --source 0 --broker localhost --port 1883
+  ```
+  *(Nếu muốn cắt clip từ video quay sẵn để làm dữ liệu huấn luyện cho `notebooks/train_videomae.ipynb`, dùng lệnh chung code)*:
+  ```powershell
+  .\.venv\Scripts\python.exe scripts/extract_person_clips.py --input data/extracted_samples/demo_rgb_people.mp4 --output-dir data/person_clips/normal
+  ```
+
+- **Luồng B — Shopformer trên video mẫu PoseLift (`shoplift_iot.main`)**:
+  ```powershell
+  .\.venv\Scripts\python.exe -m shoplift_iot.main --source "third_party/PoseLift/Samples/Hiding an item in their pants.mp4" --max-frames 45
+  ```
+
+#### Bước 5: Admin Xác nhận Cảnh báo & Khóa/Mở Cửa trên Dashboard (`http://localhost:8000`)
+1. Khi có cảnh báo vượt ngưỡng `K=3` cửa sổ liên tiếp, thẻ sự kiện kèm clip xuất hiện trên `http://localhost:8000`.
+2. Admin xem clip, nếu cần khóa cửa tạm thời thì bấm nút **`🔒 Khóa cửa (45s)`** trên thẻ sự kiện (hoặc nút **`🔒 Khóa cửa (Có xác nhận)`** ở thanh trạng thái cửa).
+3. **Hộp xác nhận Khóa cửa** hiện lên: Admin kiểm tra `event_id`, thời hạn `ttl_sec` (mặc định `45` giây), lý do và bấm **`Xác nhận Khóa cửa`**.
+4. Hệ thống phát bản tin `store/store_01/door/cmd` (`QoS 1`) và ghi vào `data/door_audit.log` + bảng `door_logs`.
+5. Cửa chuyển sang `🔒 CỬA ĐANG KHÓA (LOCKED)` và tự động mở lại sau `45` giây, hoặc mở ngay lập tức khi Admin bấm **`🔓 Mở cửa ngay (Ưu tiên)`**.
 
 ---
 
-## 4. Giới hạn của Hệ thống (Báo cáo Trung thực)
+## 5. Báo cáo Trung thực về Những gì Đã & Chưa Kiểm thử được
 
-1. **Độ chính xác ở mức khiêm tốn (`AUC-PR = 49.13%`, `EER = 0.3315`)**:
-   - Mô hình chỉ dựa trên tọa độ 2D của các khớp xương mà **không nhìn thấy vật thể/hàng hóa** trên tay khách hàng. Vì vậy, các động tác bình thường nhưng ít gặp (như cúi sâu buộc dây giày, cho tay vào túi áo khoác lấy điện thoại, vươn người lấy hàng trên kệ cao) cũng tạo ra sai số tái tạo MSE cao và có thể gây báo động nhầm.
-2. **Quy mô bộ dữ liệu nhỏ**:
-   - Bộ dữ liệu PoseLift chỉ gồm 151 đoạn dữ liệu khung xương từ 6 góc camera siêu thị. Mô hình chưa được học trên đa dạng độ tuổi, trang phục hoặc tốc độ di chuyển khác nhau.
-3. **Nhạy cảm với sự thay đổi góc camera và hiện tượng che khuất (Occlusion)**:
-   - Trong siêu thị thực tế, kệ hàng thường che khuất phần chân của khách hàng. Khi các khớp chân có độ tin cậy bằng `0` hoặc bị ước lượng sai, tâm khung xương và độ lệch chuẩn chiều cao `std(Y)` bị biến dạng, dễ dẫn đến điểm MSE tăng đột biến.
-   - Khi lắp đặt camera ở góc nhìn mới (ví dụ góc nhìn từ đỉnh đầu xuống hoặc góc thấp), cần thu thập lại các clip đi lại bình thường tại góc máy đó và chạy lại `scripts/calibrate_threshold.py`.
-4. **Phụ thuộc vào chất lượng theo dõi đối tượng (ByteTrack)**:
-   - Nếu hai người đi cắt ngang nhau gây đổi ID (`ID switch`), cửa sổ trượt 12 khung hình sẽ ghép khung xương của hai người khác nhau, gây nhảy điểm bất thường tại thời điểm giao cắt.
-
----
-
-## 5. Hướng dẫn Cài đặt & Sử dụng
-
-### 5.1. Môi trường Python
-Dự án sử dụng Python 3.11 trong môi trường ảo `.venv`:
-```powershell
-# Kiểm tra toàn bộ 16 bài test đơn vị & tích hợp (Stages B, C, D, E)
-.\.venv\Scripts\python.exe -m pytest tests/ -v
-```
-
-### 5.2. Các Lệnh Chạy Đánh giá & Tiện ích
-```powershell
-# 1. Đánh giá AUC-ROC, AUC-PR, EER trên tập test PoseLift
-.\.venv\Scripts\python.exe scripts/evaluate.py
-
-# 2. Hiệu chỉnh ngưỡng từ tập bình thường (mặc định phân vị 99)
-.\.venv\Scripts\python.exe scripts/calibrate_threshold.py --percentile 99
-
-# 3. Trích xuất khung xương từ video bất kỳ ra chuẩn JSON/PKL của PoseLift
-.\.venv\Scripts\python.exe scripts/extract_poses.py --input data/extracted_samples/demo_rgb_people.mp4 --output-dir data/extracted_samples --save-pkl
-```
-
----
-
-## 6. Kịch bản Demo Ngắn (5 Phút Bảo vệ Đồ án)
-
-### Bước 1: Chứng minh Kết quả Đánh giá Học thuật trên Tập Test PoseLift
-Chạy lệnh đánh giá để in bảng so sánh `AUC-ROC`, `AUC-PR`, `EER` với bài báo gốc:
-```powershell
-.\.venv\Scripts\python.exe scripts/evaluate.py
-```
-
-### Bước 2: Khởi động Broker MQTT & Giao diện Web Dashboard
-**Cách 1 — Chạy bằng Docker Compose (Khuyến nghị khi đã bật Docker Desktop):**
-```powershell
-docker compose up -d --build
-```
-*(Lệnh này khởi động container `shopformer-mosquitto` ở cổng `1883` và `shopformer-dashboard` ở cổng `8000`).*
-
-**Cách 2 — Chạy trực tiếp Dashboard trên máy host (nếu không bật Docker):**
-```powershell
-.\.venv\Scripts\python.exe -m shoplift_iot.dashboard.app --port 8000
-```
-Mở trình duyệt truy cập: **`http://localhost:8000`**
-
-### Bước 3: Chạy Suy luận trên Video Bình thường (Không phát cảnh báo giả)
-Mở một cửa sổ terminal thứ hai và chạy trên video người đứng/di chuyển bình thường:
-```powershell
-.\.venv\Scripts\python.exe -m shoplift_iot.main --source "data/extracted_samples/demo_rgb_people.mp4"
-```
-- **Quan sát**: Điểm MSE chỉ dao động quanh `0.17 – 0.26` (thấp hơn ngưỡng `0.30`), không vượt ngưỡng trong 3 cửa sổ liên tiếp nên `Total anomaly alerts emitted: 0`.
-
-### Bước 4: Chạy Suy luận trên Video Hành vi Bất thường (Phát cảnh báo MQTT + Lưu Clip 5s)
-Chạy trên video mẫu hành vi giấu hàng của PoseLift:
-```powershell
-.\.venv\Scripts\python.exe -m shoplift_iot.main --source "third_party/PoseLift/Samples/Hiding an item in their pants.mp4" --max-frames 45
-```
-- **Quan sát trên Terminal**:
-  - Khi điểm MSE đã làm mượt vượt ngưỡng `0.30` trong **3 cửa sổ liên tiếp** (`K=3`), hệ thống in ra dòng `[ALERT]`, lưu đoạn clip 5 giây có vẽ khung xương + điểm số vào `data/clips/evt_*.mp4`, và gửi bản tin JSON qua MQTT topic `store/store_01/cam/cam_01/alert`.
-  - Các khung hình tiếp theo của cùng `track_id` trong vòng 10 giây sẽ được chặn bởi cơ chế **cooldown** để tránh báo lặp.
-
-### Bước 5: Xem lại Clip & Gán Nhãn trên Web Dashboard (`http://localhost:8000`)
-- Trên trang web `http://localhost:8000`, thẻ sự kiện mới tự động xuất hiện ở đầu danh sách (cập nhật mỗi 2.5 giây).
-- Người vận hành xem lại đoạn clip 5 giây phát trực tiếp trên thẻ sự kiện và bấm một trong hai nút:
-  - **"Xác nhận"** (`decision = "confirmed"`) nếu đúng là hành vi đáng ngờ cần kiểm tra.
-  - **"Bỏ qua"** (`decision = "ignored"`) nếu là báo động nhầm.
-- Lựa chọn này được lưu bền vững vào bảng `events` trong file SQLite `data/events.db` để làm nhãn phục vụ tinh chỉnh mô hình về sau.
-
+1. **Phần cứng ESP32 & Relay vật lý**:
+   - Đã viết đầy đủ mã nguồn firmware tại [`firmware/esp32_door/esp32_door.ino`](file:///e:/Shopformer/firmware/esp32_door/esp32_door.ino) và [`firmware/esp32_door/platformio.ini`](file:///e:/Shopformer/firmware/esp32_door/platformio.ini) tuân thủ đúng hợp đồng MQTT, cơ chế tự mở khi hết `ttl_sec` và fail-safe ngắt relay khi rớt WiFi/MQTT.
+   - **Chưa kiểm thử trên mạch ESP32 + khóa từ thật** trong môi trường hiện tại; toàn bộ logic điều khiển cửa, đếm ngược TTL, ưu tiên lệnh `unlock` và fail-safe đã được kiểm thử tự động qua `DoorController`, `scripts/fake_door.py` và mock MQTT broker trong [`tests/test_door_controller.py`](file:///e:/Shopformer/tests/test_door_controller.py).
+2. **Huấn luyện VideoMAE & GPU**:
+   - Môi trường chạy kiểm thử hiện tại dùng CPU; việc fine-tune `MCG-NJU/videomae-base` trong [`notebooks/train_videomae.ipynb`](file:///e:/Shopformer/notebooks/train_videomae.ipynb) hoặc huấn luyện Shopformer trong [`notebooks/train_shopformer.ipynb`](file:///e:/Shopformer/notebooks/train_shopformer.ipynb) được thiết kế để chạy trên Google Colab / Kaggle có GPU T4.
+3. **Độ chính xác nhận diện hành vi trong thực tế**:
+   - Trên tập test PoseLift, nhánh khung xương đạt `AUC-ROC = 74.33%`, `AUC-PR = 49.13%`, `EER = 0.3315`. Các động tác cúi người sâu, chỉnh trang phục hoặc bị kệ hàng che khuất vẫn có thể gây cảnh báo giả, do đó **ràng buộc `auto_lock = false` (bắt buộc con người xem clip và bấm xác nhận)** là chốt chặn an toàn cốt lõi của hệ thống.
