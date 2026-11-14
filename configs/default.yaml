@@ -82,7 +82,19 @@ alerting:
   score_smooth_window: 3
   consecutive_windows_k: 3
   cooldown_seconds: 10.0
+  wait_admin_seconds: 30.0
+  auto_lock: false
   clip_duration_seconds: 5.0
+
+door:
+  default_ttl_sec: 45
+  max_ttl_sec: 120
+  gpio_pin: 26
+  active_high: true
+  fail_safe_state: "unlocked"
+  cmd_topic_template: "store/{store_id}/door/cmd"
+  status_topic_template: "store/{store_id}/door/status"
+  audit_log_path: "data/door_audit.log"
 
 mqtt:
   broker_host: "localhost"
@@ -90,6 +102,9 @@ mqtt:
   store_id: "store_01"
   cam_id: "cam_01"
   topic_template: "store/{store_id}/cam/{cam_id}/alert"
+  status_topic_template: "store/{store_id}/cam/{cam_id}/status"
+  door_cmd_topic_template: "store/{store_id}/door/cmd"
+  door_status_topic_template: "store/{store_id}/door/status"
   keepalive: 60
 
 dashboard:

@@ -78,6 +78,22 @@ class AppConfig(Mapping[str, Any]):
         return self.raw["alerting"]
 
     @property
+    def door(self) -> dict[str, Any]:
+        return self.raw.get(
+            "door",
+            {
+                "default_ttl_sec": 45,
+                "max_ttl_sec": 120,
+                "gpio_pin": 26,
+                "active_high": True,
+                "fail_safe_state": "unlocked",
+                "cmd_topic_template": "store/{store_id}/door/cmd",
+                "status_topic_template": "store/{store_id}/door/status",
+                "audit_log_path": "data/door_audit.log",
+            },
+        )
+
+    @property
     def mqtt(self) -> dict[str, Any]:
         return self.raw["mqtt"]
 

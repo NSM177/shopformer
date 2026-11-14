@@ -301,3 +301,4 @@ def save_person_clip_mp4(
         writer.write(resized)
     writer.release()
     return target
+

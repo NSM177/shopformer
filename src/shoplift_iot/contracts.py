@@ -108,3 +108,59 @@ class AlertEvent:
             "clip_path": self.clip_path,
         }
 
+
+@dataclass(slots=True)
+class DoorCommand:
+    """MQTT payload for `store/{store_id}/door/cmd`: `{action: 'lock'|'unlock', reason, event_id, ttl_sec}`."""
+
+    action: str  # "lock" | "unlock"
+    reason: str
+    event_id: str
+    ttl_sec: int = 45
+
+    def __post_init__(self) -> None:
+        if self.action not in ("lock", "unlock"):
+            raise ValueError(f"Invalid door action '{self.action}'. Must be 'lock' or 'unlock'.")
+        self.ttl_sec = int(self.ttl_sec)
+        if self.action == "lock" and self.ttl_sec <= 0:
+            raise ValueError("ttl_sec must be positive for 'lock' commands.")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize DoorCommand to the strict MQTT JSON contract."""
+        return {
+            "action": self.action,
+            "reason": str(self.reason),
+            "event_id": str(self.event_id),
+            "ttl_sec": int(self.ttl_sec),
+        }
+
+
+@dataclass(slots=True)
+class DoorStatus:
+    """MQTT payload for `store/{store_id}/door/status`: `{state: 'locked'|'unlocked', ts, event_id}`."""
+
+    state: str  # "locked" | "unlocked"
+    ts: str
+    event_id: str = ""
+
+    def __post_init__(self) -> None:
+        if self.state not in ("locked", "unlocked"):
+            raise ValueError(f"Invalid door state '{self.state}'. Must be 'locked' or 'unlocked'.")
+
+    @classmethod
+    def create(cls, state: str, event_id: str = "", ts: str | None = None) -> DoorStatus:
+        """Create a DoorStatus with ISO-8601 UTC timestamp."""
+        return cls(
+            state=state,
+            ts=ts or datetime.now(timezone.utc).isoformat(),
+            event_id=str(event_id),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize DoorStatus to the strict MQTT JSON contract."""
+        return {
+            "state": self.state,
+            "ts": self.ts,
+            "event_id": str(self.event_id),
+        }
+
