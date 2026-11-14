@@ -65,21 +65,32 @@ class PoseTracker:
             return []
 
         res = results[0]
-        if res.boxes is None or res.keypoints is None:
-            return []
-        if res.boxes.id is None:
+        if res.boxes is None or res.boxes.id is None:
             return []
 
         track_ids = res.boxes.id.int().cpu().numpy()
         bboxes = res.boxes.xywh.float().cpu().numpy()
         confs = res.boxes.conf.float().cpu().numpy()
-        kps_data = res.keypoints.data.float().cpu().numpy()  # (N, 17, 3)
+        classes = (
+            res.boxes.cls.int().cpu().numpy()
+            if getattr(res.boxes, "cls", None) is not None
+            else np.zeros(len(track_ids), dtype=np.int32)
+        )
+        kps_data = (
+            res.keypoints.data.float().cpu().numpy()
+            if res.keypoints is not None
+            else np.zeros((len(track_ids), 17, 3), dtype=np.float32)
+        )
 
         poses: list[PersonPose] = []
         for idx, tid in enumerate(track_ids):
-            if idx >= len(kps_data):
-                break
-            kp = kps_data[idx]
+            if int(classes[idx]) != 0:
+                continue
+            kp = (
+                kps_data[idx]
+                if idx < len(kps_data)
+                else np.zeros((17, 3), dtype=np.float32)
+            )
             if kp.shape == (17, 2):
                 kp = np.concatenate([kp, np.ones((17, 1), dtype=np.float32)], axis=-1)
             poses.append(

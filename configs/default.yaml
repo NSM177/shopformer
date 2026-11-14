@@ -23,6 +23,16 @@ pose_track:
   iou_threshold: 0.45
   device: "cuda:0"
 
+person_clips:
+  margin_ratio: 0.15
+  clip_sec: 3.0
+  hop_sec: 1.0
+  num_frames: 16
+  frame_size: 224
+  min_span_ratio: 0.8
+  min_frames: 8
+  stale_sec: 5.0
+
 preprocess:
   window_size: 12
   window_stride_train: 6

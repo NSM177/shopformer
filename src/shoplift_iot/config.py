@@ -42,6 +42,22 @@ class AppConfig(Mapping[str, Any]):
         return self.raw["pose_track"]
 
     @property
+    def person_clips(self) -> dict[str, Any]:
+        return self.raw.get(
+            "person_clips",
+            {
+                "margin_ratio": 0.15,
+                "clip_sec": 3.0,
+                "hop_sec": 1.0,
+                "num_frames": 16,
+                "frame_size": 224,
+                "min_span_ratio": 0.8,
+                "min_frames": 8,
+                "stale_sec": 5.0,
+            },
+        )
+
+    @property
     def preprocess(self) -> dict[str, Any]:
         return self.raw["preprocess"]
 
