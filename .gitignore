@@ -17,11 +17,17 @@ dist/
 *.egg-info/
 src/*.egg-info/
 
-# Dataset, clips, and runtime databases
+# Dataset, clips, archives, and runtime databases
 data/
+clips/
 *.db
 *.db-journal
 *.db-wal
+*.zip
+*.tar.gz
+*.7z
+*.rar
+*.exe
 
 # Model weights & checkpoints
 *.pt

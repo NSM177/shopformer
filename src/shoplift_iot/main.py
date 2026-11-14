@@ -170,7 +170,7 @@ def run_pipeline(
     if pose_json_path is not None and pose_json_path.exists():
         fallback_timeline = _load_poselift_json_frames(pose_json_path, swap_yx=swap_yx)
     else:
-        default_test_json = PROJECT_ROOT / "data" / "PoseLift" / "pose" / "test" / "01_0257_alphapose_tracked_person.json"
+        default_test_json = cfg.resolve_path(cfg.paths["pose_test_dir"]) / "01_0257_alphapose_tracked_person.json"
         if default_test_json.exists():
             fallback_timeline = _load_poselift_json_frames(default_test_json, swap_yx=swap_yx)
 

@@ -1,4 +1,4 @@
-"""Step 7: Temporal score smoothing, K-consecutive window alerting, cooldown, and 5s clip saving."""
+"""Step 7: Temporal score smoothing, K-consecutive window alerting, cooldown, and clip saving."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Mapping
 import uuid
 
-import cv2
 import numpy as np
 
+from shoplift_iot.alerting.clip_recorder import ClipRecorder
 from shoplift_iot.config import AppConfig, load_app_config
 from shoplift_iot.contracts import AlertEvent
 from shoplift_iot.model.bundle import ModelBundle
@@ -28,8 +28,11 @@ class AlertManager:
         consecutive_windows_k: int = 3,
         cooldown_seconds: float = 10.0,
         clip_duration_seconds: float = 5.0,
+        pre_event_seconds: float | None = None,
+        post_event_seconds: float = 2.0,
         target_fps: float = 15.0,
         project_root: Path | None = None,
+        clip_recorder: ClipRecorder | None = None,
     ) -> None:
         self.threshold = float(threshold)
         self.clips_dir = Path(clips_dir)
@@ -42,8 +45,19 @@ class AlertManager:
         self.target_fps = max(1.0, float(target_fps))
         self.project_root = project_root
 
-        max_clip_frames = max(1, int(round(self.clip_duration_seconds * self.target_fps)))
-        self._frame_buffer: deque[np.ndarray] = deque(maxlen=max_clip_frames)
+        pre_sec = (
+            float(pre_event_seconds)
+            if pre_event_seconds is not None
+            else max(1.0, self.clip_duration_seconds - float(post_event_seconds))
+        )
+        self.clip_recorder = clip_recorder or ClipRecorder(
+            clips_dir=self.clips_dir,
+            target_fps=self.target_fps,
+            pre_event_seconds=pre_sec,
+            post_event_seconds=float(post_event_seconds),
+            project_root=self.project_root,
+        )
+
         self._score_history: dict[int, deque[float]] = {}
         self._consecutive_counts: dict[int, int] = {}
         self._last_alert_ts: dict[int, float] = {}
@@ -60,6 +74,7 @@ class AlertManager:
         app_cfg = load_app_config(config_or_path, project_root=project_root)
         root = app_cfg.project_root
         alert_cfg = app_cfg.alerting
+        pipe_cfg = app_cfg.pipeline
 
         loaded_bundle = bundle or ModelBundle.load(app_cfg.bundle_dir, cfg=app_cfg, project_root=root)
         threshold = float(loaded_bundle.threshold)
@@ -74,13 +89,19 @@ class AlertManager:
             consecutive_windows_k=int(alert_cfg["consecutive_windows_k"]),
             cooldown_seconds=float(alert_cfg["cooldown_seconds"]),
             clip_duration_seconds=float(alert_cfg["clip_duration_seconds"]),
+            pre_event_seconds=float(pipe_cfg.get("pre_event_seconds", 3.0)),
+            post_event_seconds=float(pipe_cfg.get("post_event_seconds", 2.0)),
             target_fps=float(app_cfg.video["target_fps"]),
             project_root=root,
         )
 
     def push_frame(self, frame_bgr: np.ndarray) -> None:
-        """Append a video frame to the rolling 5-second clip buffer."""
-        self._frame_buffer.append(frame_bgr.copy())
+        """Append a video frame to the pre-event ring buffer and active post-event clips."""
+        self.clip_recorder.push_frame(frame_bgr)
+
+    def flush_clips(self) -> None:
+        """Flush all pending post-event video clips to disk."""
+        self.clip_recorder.flush_all()
 
     def get_smoothed_score(self, track_id: int) -> float | None:
         """Return the latest temporally smoothed score for `track_id`, or None if unseen."""
@@ -133,31 +154,8 @@ class AlertManager:
         )
 
     def save_clip(self, event_id: str) -> str:
-        """Save buffered frames as a short MP4 video clip and return its relative POSIX path."""
-        out_file = self.clips_dir / f"{event_id}.mp4"
-        frames = list(self._frame_buffer)
-        if not frames:
-            frames = [np.zeros((480, 640, 3), dtype=np.uint8)]
-
-        h, w = frames[0].shape[:2]
-        writer = cv2.VideoWriter(
-            str(out_file),
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            self.target_fps,
-            (w, h),
-        )
-        for frm in frames:
-            if frm.shape[:2] != (h, w):
-                frm = cv2.resize(frm, (w, h))
-            writer.write(frm)
-        writer.release()
-
-        if self.project_root is not None:
-            try:
-                return out_file.resolve().relative_to(self.project_root.resolve()).as_posix()
-            except ValueError:
-                pass
-        return out_file.as_posix()
+        """Trigger pre/post-event MP4 clip recording for `event_id` and return its relative POSIX path."""
+        return self.clip_recorder.trigger_clip(event_id)
 
 
 def main() -> None:
@@ -175,6 +173,7 @@ def main() -> None:
         ev = manager.update_score(track_id=1, raw_score=sc, timestamp_sec=float(i))
         if ev is not None:
             fired.append(ev)
+    manager.flush_clips()
     print(f"[AlertManager] Fired {len(fired)} alert(s). First payload: {fired[0].to_dict() if fired else None}")
 
 

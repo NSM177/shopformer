@@ -164,7 +164,7 @@ def test_extract_poses_matches_poselift_format_and_loads_in_dataset(tmp_path: Pa
     )
 
     # Compare schema against a real PoseLift JSON file
-    real_poselift_files = sorted((PROJECT_ROOT / "data" / "PoseLift" / "pose" / "test").glob("*.json"))
+    real_poselift_files = sorted((PROJECT_ROOT / "data" / "raw" / "PoseLift" / "pose" / "test").glob("*.json"))
     assert len(real_poselift_files) > 0
     with open(real_poselift_files[0], "r", encoding="utf-8") as rf:
         real_data = json.load(rf)

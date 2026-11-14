@@ -1,8 +1,8 @@
 paths:
-  data_dir: "data/PoseLift"
-  pose_train_dir: "data/PoseLift/pose/train"
-  pose_test_dir: "data/PoseLift/pose/test"
-  gt_mask_dir: "data/PoseLift/gt/test_frame_mask"
+  data_dir: "data/raw/PoseLift"
+  pose_train_dir: "data/raw/PoseLift/pose/train"
+  pose_test_dir: "data/raw/PoseLift/pose/test"
+  gt_mask_dir: "data/raw/PoseLift/gt/test_frame_mask"
   checkpoints_dir: "checkpoints"
   bundle_dir: "checkpoints/shopformer_v1"
   gcae_ckpt: "checkpoints/gcae_best.pt"
