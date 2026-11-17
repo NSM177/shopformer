@@ -71,6 +71,41 @@ def expand_bbox_xyxy(
     return x1, y1, x2, y2
 
 
+def _xywh_to_xyxy(b: np.ndarray | list[float]) -> tuple[float, float, float, float]:
+    cx, cy, bw, bh = (float(v) for v in b[:4])
+    return cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0
+
+
+def _crop_square_like_training(
+    frame_bgr: np.ndarray,
+    bbox_xywh: np.ndarray | list[float],
+    margin: float,
+    other_bboxes: list[np.ndarray | list[float]] | None,
+    gray: int,
+    size: int | None,
+) -> np.ndarray:
+    """Bản sao 1-1 của crops_lite.crop_masked/crop_square trong notebook train (xyxy, giữ BGR)."""
+    target = _xywh_to_xyxy(bbox_xywh)
+    if other_bboxes:
+        h, w = frame_bgr.shape[:2]
+        f = frame_bgr.copy()
+        for ob in other_bboxes:
+            x0, y0, x1, y1 = (int(round(v)) for v in _xywh_to_xyxy(ob))
+            f[max(0, y0):max(0, min(h, y1)), max(0, x0):max(0, min(w, x1))] = gray
+        tx0, ty0, tx1, ty1 = (int(round(v)) for v in target)
+        tx0, ty0, tx1, ty1 = max(0, tx0), max(0, ty0), min(w, tx1), min(h, ty1)
+        f[ty0:ty1, tx0:tx1] = frame_bgr[ty0:ty1, tx0:tx1]
+        frame_bgr = f
+    x0, y0, x1, y1 = target
+    side = max(max(x1 - x0, y1 - y0) * (1.0 + 2.0 * float(margin)), 8.0)
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    out_size = int(size) if size else max(8, int(round(side)))
+    s = out_size / side
+    m = np.array([[s, 0.0, out_size / 2.0 - s * cx], [0.0, s, out_size / 2.0 - s * cy]], np.float32)
+    return cv2.warpAffine(frame_bgr, m, (out_size, out_size), flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_REPLICATE)
+
+
 def crop_person_with_margin(
     frame_bgr: np.ndarray,
     bbox_xywh: np.ndarray | list[float],
@@ -79,8 +114,20 @@ def crop_person_with_margin(
     other_bboxes: list[np.ndarray | list[float]] | None = None,
     mask_others: bool = True,
     mask_color: int = 114,
+    size: int | None = None,
 ) -> np.ndarray:
-    """Crop the region around a tracked person's bounding box with margin, squared, and mask other persons (114)."""
+    """Crop the region around a tracked person's bounding box with margin, squared, and mask other persons (114).
+
+    square=True dùng ĐÚNG cách cắt lúc train (models/videomae_bundle/crops_lite.py: crop_masked/crop_square):
+    tô xám người khác trên cả khung nhưng giữ nguyên bbox của người đang xét, rồi cắt hình vuông cạnh
+    max(w, h) * (1 + 2*margin) đặt giữa bbox (không dịch tâm khi sát mép, phần vượt mép lặp pixel biên),
+    phóng thẳng về `size` bằng warpAffine INTER_LINEAR. Trả BGR (size x size).
+    """
+    if square:
+        return _crop_square_like_training(
+            frame_bgr, bbox_xywh, margin_ratio,
+            other_bboxes if mask_others else None, mask_color, size,
+        )
     h, w = frame_bgr.shape[:2]
     x1, y1, x2, y2 = expand_bbox_xyxy(
         np.asarray(bbox_xywh), frame_w=w, frame_h=h, margin_ratio=margin_ratio, square=square
@@ -197,6 +244,7 @@ class PersonClipBuffer:
                 square=self.square,
                 other_bboxes=other_bboxes,
                 mask_others=self.mask_others,
+                size=self.size,
             )
             buf = self._buffers.setdefault(tid, deque())
             buf.append((ts, crop, pose.bbox_xywh.copy()))

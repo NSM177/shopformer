@@ -297,8 +297,13 @@ export default function App() {
       if (res.ok) {
         setUseDirectPort8001(false);
         setStreamNonce(Date.now());
+      } else {
+        const err = await res.json().catch(() => ({}));
+        window.alert(`Không bắt đầu được nguồn video: ${err.detail || res.status}`);
       }
-    } catch (_e) {}
+    } catch (e) {
+      window.alert(`Không kết nối được dịch vụ pipeline: ${e}`);
+    }
   }
 
   async function handleStopPipeline() {
@@ -339,8 +344,12 @@ export default function App() {
           setSourceMode('file');
           await handleStartPipeline('file', data.path);
         }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        window.alert(`Tải video lên thất bại: ${err.detail || res.status}`);
       }
-    } catch (_e) {
+    } catch (e) {
+      window.alert(`Tải video lên thất bại: ${e}`);
     } finally {
       setUploading(false);
       setShowSourceModal(false);
@@ -576,6 +585,19 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {/* Ô chọn file dùng chung cho MỌI nút "Tải video" (tab Giám sát, hộp thoại nguồn, tab Phân tích).
+          Trước đây nó nằm trong tab Phân tích nên ở tab khác fileInputRef = null và bấm nút không có tác dụng. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".mp4,.avi,.mov,.mkv,video/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) handleFileUpload(f);
+        }}
+      />
       {/* Hidden static elements to satisfy FastAPI pytest suite */}
       <div id="lock-confirm-modal" style={{ display: 'none' }}>Xác nhận Khóa cửa</div>
       <div id="reset-events-modal" style={{ display: 'none' }}>Xóa tất cả sự kiện</div>
@@ -1469,16 +1491,6 @@ export default function App() {
                 if (f) handleFileUpload(f);
               }}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".mp4,.avi,.mov,.mkv"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFileUpload(f);
-                }}
-              />
               <div className="upload-left">
                 <div className="upload-icon-box">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">

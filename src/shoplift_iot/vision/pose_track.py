@@ -34,8 +34,16 @@ class PoseTracker:
         max_coast_frames: int = 15,
     ) -> None:
         """Initialize YOLOv8 + ByteTrack tracker with optional Kalman bbox coasting on short misses."""
+        # Tìm trọng số: đường dẫn trong config -> cùng tên ở gốc project (Docker tải sẵn vào /app) ->
+        # tên trơn (ultralytics tự tải về thư mục hiện tại; tránh ghi vào models/ vì Docker mount read-only).
         candidate = PROJECT_ROOT / model_name
-        self.model_name = str(candidate) if candidate.exists() else model_name
+        fallback = PROJECT_ROOT / Path(model_name).name
+        if candidate.exists():
+            self.model_name = str(candidate)
+        elif fallback.exists():
+            self.model_name = str(fallback)
+        else:
+            self.model_name = Path(model_name).name if Path(model_name).suffix == ".pt" else model_name
         trk_candidate = PROJECT_ROOT / tracker_config
         self.tracker_config = str(trk_candidate) if trk_candidate.exists() else tracker_config
         self.conf_threshold = float(conf_threshold)

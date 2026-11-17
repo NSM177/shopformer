@@ -1,117 +1,98 @@
-"""tests/test_parity.py: Kiem tra do lech diem (parity) giua offline reference va live pipeline.
-Khẳng định điểm từng cửa sổ lệch nhau dưới 1e-3 khi dung chung quy trinh chuan.
+"""tests/test_parity.py: Kiểm tra app cắt ảnh người GIỐNG HỆT lúc train VideoMAE.
+
+Tham chiếu là `models/videomae_bundle/crops_lite.py` (notebook train_videomae_2 chép vào bundle):
+crop_masked(frame, target_xyxy, others_xyxy, margin, size) -> RGB size x size.
+App dùng `shoplift_iot.vision.person_clips` (bbox dạng xywh, giữ BGR rồi resize_rgb).
 """
 from __future__ import annotations
 
-import json
+import importlib.util
 from pathlib import Path
 import sys
 
-import cv2
 import numpy as np
 import pytest
-import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-for p in (str(PROJECT_ROOT), str(PROJECT_ROOT / "src"), str(PROJECT_ROOT / "models" / "videomae_bundle")):
+BUNDLE = PROJECT_ROOT / "models" / "videomae_bundle"
+for p in (str(PROJECT_ROOT), str(PROJECT_ROOT / "src")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from crops_lite import crop_masked, sample_16_frames_in_time
-from videomae_lite import Predictor, to_tensor
+from shoplift_iot.contracts import PersonPose  # noqa: E402
+from shoplift_iot.vision.person_clips import PersonClipBuffer, crop_person_with_margin  # noqa: E402
+from videomae_lite import Predictor, resize_rgb  # noqa: E402
+
+
+def _bundle_crops():
+    f = BUNDLE / "crops_lite.py"
+    if not f.exists():
+        pytest.skip("Bundle chưa có crops_lite.py")
+    spec = importlib.util.spec_from_file_location("bundle_crops_lite", f)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not hasattr(mod, "crop_masked"):
+        pytest.skip("crops_lite.py của bundle không có crop_masked")
+    return mod
+
+
+def _xyxy(b):
+    cx, cy, w, h = b
+    return (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+
+
+def _frame(seed=0, h=480, w=640):
+    return np.random.default_rng(seed).integers(0, 256, (h, w, 3), dtype=np.uint8)
+
+
+@pytest.mark.parametrize(
+    "target, others",
+    [
+        ([320.0, 240.0, 100.0, 200.0], [[350.0, 240.0, 80.0, 180.0]]),   # 2 người chồng nhau
+        ([30.0, 40.0, 60.0, 120.0], []),                                  # sát góc trên-trái
+        ([620.0, 400.0, 90.0, 200.0], [[560.0, 380.0, 70.0, 160.0]]),     # sát mép phải-dưới
+    ],
+)
+def test_app_crop_equals_training_crop(target, others):
+    ref_mod = _bundle_crops()
+    frame = _frame()
+    ref = ref_mod.crop_masked(frame, _xyxy(target), [_xyxy(o) for o in others], 0.18, 224)
+    app_bgr = crop_person_with_margin(frame, np.array(target), margin_ratio=0.18, square=True,
+                                      other_bboxes=[np.array(o) for o in others], mask_others=True, size=224)
+    app = resize_rgb(app_bgr, 224)
+    assert app.shape == ref.shape == (224, 224, 3)
+    assert np.array_equal(app, ref)
+
+
+def test_clip_buffer_window_equals_training_crops():
+    """PersonClipBuffer (đường chạy thật) cho ra đúng 16 crop như cách train tạo cửa sổ."""
+    ref_mod = _bundle_crops()
+    buf = PersonClipBuffer(clip_sec=3.0, hop_sec=1.0, n_frames=16, size=224, margin_ratio=0.18,
+                           min_span_ratio=1.0, min_frames=16, square=True, mask_others=True)
+    fps, frames, boxes, wins = 15.0, [], [], []
+    for i in range(46):
+        fr = _frame(i)
+        b = np.array([200.0 + 3 * i, 240.0, 80.0, 160.0], np.float32)
+        o = np.array([260.0, 250.0, 70.0, 150.0], np.float32)
+        frames.append(fr); boxes.append((b, o))
+        poses = [PersonPose(track_id=1, bbox_xywh=b, keypoints_xyc=np.zeros((17, 3), np.float32), score=0.9),
+                 PersonPose(track_id=2, bbox_xywh=o, keypoints_xyc=np.zeros((17, 3), np.float32), score=0.9)]
+        wins += [w for w in buf.update(i / fps, fr, poses) if w.track_id == 1]
+    assert wins, "buffer không phát cửa sổ nào"
+    w = wins[0]
+    ts = np.arange(46) / fps
+    idx = [int(np.argmin(np.abs(ts - t))) for t in np.linspace(w.start_ts, w.end_ts, 16)]
+    ref = np.stack([ref_mod.crop_masked(frames[k], _xyxy(boxes[k][0]), [_xyxy(boxes[k][1])], 0.18, 224) for k in idx])
+    assert np.array_equal(w.frames_rgb, ref)
+
+    if (BUNDLE / "model" / "model.safetensors").exists():
+        pred = Predictor(BUNDLE, device="cpu")
+        assert abs(pred.predict(w.frames_rgb) - pred.predict(ref)) < 1e-6
 
 
 def test_videomae_predictor_determinism():
-    """Kiem tra Predictor chay cung 1 clip tren cung device cho ket qua giong het nhau."""
-    bundle_dir = PROJECT_ROOT / "models" / "videomae_bundle"
-    if not (bundle_dir / "model" / "model.safetensors").exists():
-        pytest.skip("Chua co bundle model VideoMAE.")
-
-    predictor = Predictor(bundle_dir, device="cpu")
-
-    # Tao clip gia lap 16 khung 224x224 RGB
-    rng = np.random.default_rng(42)
-    fake_clip = rng.integers(0, 256, (16, 224, 224, 3), dtype=np.uint8)
-
-    p1 = predictor.predict(fake_clip)
-    p2 = predictor.predict(fake_clip)
-    assert abs(p1 - p2) < 1e-6, f"Predictor khong xac dinh: {p1} vs {p2}"
-
-
-def test_crop_masked_parity():
-    """Kiem tra phep crop_masked va mask 114 giua cac module hoat dong nhat quan."""
-    frame = np.full((480, 640, 3), 200, dtype=np.uint8)
-    target_bbox = [320.0, 240.0, 100.0, 200.0]  # xc, yc, w, h
-    other_bbox = [350.0, 240.0, 80.0, 180.0]
-
-    crop1 = crop_masked(frame, target_bbox, [other_bbox], margin=0.18, mask_color=114)
-    crop2 = crop_masked(frame, target_bbox, [other_bbox], margin=0.18, mask_color=114)
-
-    assert crop1.shape[0] == crop1.shape[1]
-    assert np.array_equal(crop1, crop2)
-    # Masked region must contain 114
-    assert 114 in crop1
-
-
-def test_window_pipeline_parity(tmp_path):
-    """Chay 1 video ngan qua pipeline chuan va khang dinh do lech diem moi cua so < 1e-3."""
-    bundle_dir = PROJECT_ROOT / "models" / "videomae_bundle"
-    if not (bundle_dir / "model" / "model.safetensors").exists():
-        pytest.skip("Chua co bundle model VideoMAE.")
-
-    predictor = Predictor(bundle_dir, device="cpu")
-
-    # Tao 1 video test ngan 30 khung (2 giay o 15 FPS)
-    test_video_path = tmp_path / "synthetic_test.mp4"
-    fps = 15.0
-    w, h = 640, 480
-    out = cv2.VideoWriter(
-        str(test_video_path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (w, h),
-    )
-
-    frames = []
-    timestamps = []
-    track_records = []
-
-    for i in range(45):  # 3.0 giay = 45 frames
-        t = i / fps
-        timestamps.append(t)
-        frame = np.full((h, w, 3), 120, dtype=np.uint8)
-        # Ve 1 nguoi gia lap di chuyen nhe
-        xc = 200.0 + i * 2.0
-        yc = 240.0
-        bw = 80.0
-        bh = 160.0
-        x1, y1 = int(xc - bw / 2), int(yc - bh / 2)
-        x2, y2 = int(xc + bw / 2), int(yc + bh / 2)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 50, 50), -1)
-        out.write(frame)
-        frames.append(frame)
-        target_bbox = [xc, yc, bw, bh]
-        track_records.append((t, target_bbox, []))
-
-    out.release()
-
-    # Lay 16 khung qua ham chuan sample_16_frames_in_time
-    clip_ref = sample_16_frames_in_time(
-        records=track_records,
-        frames_bgr_by_idx=frames,
-        timestamps=timestamps,
-        t0=0.0,
-        t1=3.0,
-        margin=0.18,
-        mask_others=True,
-        size=224,
-    )
-
-    # Chay predict tren clip_ref
-    p_ref = predictor.predict(clip_ref)
-
-    # Chay predict tren tensor giong het
-    clip_live = clip_ref.copy()
-    p_live = predictor.predict(clip_live)
-
-    assert abs(p_ref - p_live) < 1e-3, f"Do lech giua 2 pipeline vuot qua 1e-3: {abs(p_ref - p_live)}"
+    if not (BUNDLE / "model" / "model.safetensors").exists():
+        pytest.skip("Chưa có bundle model VideoMAE.")
+    predictor = Predictor(BUNDLE, device="cpu")
+    clip = np.random.default_rng(42).integers(0, 256, (16, 224, 224, 3), dtype=np.uint8)
+    assert abs(predictor.predict(clip) - predictor.predict(clip)) < 1e-6

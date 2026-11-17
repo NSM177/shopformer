@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 import queue
+import sys
 import threading
 import time
 from typing import Any, Callable
