@@ -131,18 +131,31 @@ Shopformer/
 
 ## 4. Hướng dẫn Chạy Demo Từng Bước
 
-### Cách 1: Chạy trọn bộ bằng Docker Compose (`mosquitto + dashboard + fake_door + pipeline`)
+### Cách 1: Chạy Hybrid kết hợp Docker Compose & Pipeline trên Host (Khuyến nghị thực tế)
+
+> **Lý do Pipeline chạy trên Host**: Trên Windows, thiết bị camera/webcam vật lý (DirectShow qua USB) không thể gắn trực tiếp vào container Linux một cách ổn định. Do đó:
+> - **Mosquitto (1883), Dashboard (8000), Fake Door** chạy trong Docker Compose.
+> - **Pipeline Service (8001)** chạy trực tiếp trên máy Host để kết nối Webcam / GPU / File mượt mà nhất. Dashboard giao tiếp với Pipeline qua `host.docker.internal:8001` hoặc proxy `/api/pipeline`.
 
 ```powershell
-# Khởi động cả 4 dịch vụ (Mosquitto Broker, Web Dashboard, Fake Door ESP32, và Pipeline)
-docker compose up --build
+# 1. Khởi động Docker (Broker MQTT + Dashboard + Fake Door ESP32)
+docker compose up -d mosquitto dashboard fake_door
+
+# 2. Khởi động Pipeline Service trên máy host (cổng 8001)
+.\.venv\Scripts\python.exe scripts/run_pipeline_service.py --port 8001
+
+# 3. Mở trình duyệt tại http://localhost:8000
+# - Chọn nguồn: "Camera mặc định" (Webcam) hoặc "Video đã tải" (chọn data/supermarket_theft.mp4 hoặc kéo thả file video vào)
+# - Bấm [▶ Bắt đầu]: Khung stream hiển thị trực tiếp hình ảnh có vẽ bounding box người, track_id, điểm VideoMAE
+# - Biểu đồ Canvas vẽ diễn biến điểm số theo thời gian thực kèm đường ngưỡng đỏ
+# - Khi có hành vi nghi trộm: phát cảnh báo MQTT -> Dashboard hiện thẻ sự kiện kèm clip phát bằng <video controls>
+# - Bấm [🔒 Khóa cửa]: Cửa chuyển sang LOCKED, tự mở sau ttl_sec hoặc mở ngay khi bấm [🔓 Mở cửa ngay]
+# - Khi hết file: Hiện bảng tóm tắt tổng số cảnh báo, điểm cao nhất và các mốc thời gian nghi vấn
 ```
-- **Dashboard Web**: Mở trình duyệt tại **`http://localhost:8000`**
-- **Quan sát trạng thái cửa giả lập**: Xem log của container `shopformer-fake-door` (`docker logs -f shopformer-fake-door`).
 
 ---
 
-### Cách 2: Chạy Từng Thành phần trên Máy Local (Phục vụ Demo & Giải thích từng bước khi Bảo vệ)
+### Cách 2: Chạy Từng Thành phần trên Máy Local (Phục vụ Demo & Debug từng bước)
 
 #### Bước 1: Kiểm tra toàn bộ bộ test tự động (`pytest`)
 ```powershell
@@ -172,8 +185,11 @@ Mở **Terminal 3** — chọn 1 trong 2 luồng suy luận:
 
 - **Luồng A — VideoMAE + YOLO + ByteTrack (`demo_videomae.py`)**:
   ```powershell
-  # Cắt clip 16 khung theo từng track_id (lề 15%) -> chấm điểm VideoMAE -> qua DecisionStateMachine -> gửi MQTT
-  python demo_videomae.py --bundle models/videomae_bundle --source <video.mp4> --mqtt-host localhost --store-id store_01 --cam-id cam_01 --clips-dir data/clips --show
+  # Chạy trên video camera CCTV ăn trộm trong siêu thị vừa tải về:
+  python demo_videomae.py --bundle models/videomae_bundle --source data/theft_supermarket_cctv.mp4 --mqtt-host localhost --store-id store_01 --cam-id cam_01 --clips-dir data/clips --show
+
+  # Hoặc chạy trên webcam/video bất kỳ:
+  python demo_videomae.py --bundle models/videomae_bundle --source 0 --mqtt-host localhost --store-id store_01 --cam-id cam_01 --clips-dir data/clips --show
   ```
   *(Nếu muốn cắt clip từ video quay sẵn để làm dữ liệu huấn luyện cho `notebooks/train_videomae.ipynb`, dùng lệnh chung code)*:
   ```powershell
