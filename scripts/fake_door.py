@@ -22,13 +22,16 @@ from shoplift_iot.contracts import DoorStatus  # noqa: E402
 
 
 def _print_banner(status: DoorStatus, detail: str) -> None:
-    icon = "🔒 KHÓA (LOCKED)" if status.state == "locked" else "🔓 MỞ (UNLOCKED - FAIL-SAFE)"
+    is_locked = (status.state == "locked")
+    icon = "🔒 KHÓA (LOCKED)" if is_locked else "🔓 MỞ (UNLOCKED - FAIL-SAFE)"
+    servo_angle = "90° (ĐÃ XOAY ĐÓNG CHỐT CỬA)" if is_locked else "0° (ĐÃ XOAY MỞ CHỐT CỬA)"
     print(
         f"\n============================================================\n"
-        f"[FAKE ESP32 DOOR] Trạng thái: {icon}\n"
-        f"  Thời gian : {status.ts}\n"
-        f"  Sự kiện   : {status.event_id or '(không có)'}\n"
-        f"  Chi tiết  : {detail}\n"
+        f"[ESP32 SERVO DOOR] Trạng thái: {icon}\n"
+        f"  Động cơ Servo : {servo_angle}\n"
+        f"  Thời gian     : {status.ts}\n"
+        f"  Sự kiện       : {status.event_id or '(không có)'}\n"
+        f"  Chi tiết      : {detail}\n"
         f"============================================================",
         flush=True,
     )

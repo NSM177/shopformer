@@ -8,6 +8,11 @@ __pycache__/
 .gitignore
 data/PoseLift/
 data/extracted_samples/
+dataset/
+dataset_build/
+dataset_final/
+check_out/
+label_tool/
 checkpoints/
 third_party/
 tests/

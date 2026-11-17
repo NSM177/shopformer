@@ -171,10 +171,11 @@ def run_videomae_demo(
         hop_sec=eff_hop,
         n_frames=eff_n_frames,
         size=eff_size,
-        margin_ratio=float(pc_cfg.get("margin_ratio", 0.15)),
+        margin_ratio=float(pc_cfg.get("margin_ratio", 0.18)),
         min_span_ratio=eff_min_span,
-        min_frames=min(int(pc_cfg.get("min_frames", 8)), max(4, total_frames // 3)) if (not live and total_frames > 0) else int(pc_cfg.get("min_frames", 8)),
+        min_frames=min(int(pc_cfg.get("min_frames", 16)), max(8, total_frames // 2)) if (not live and total_frames > 0) else int(pc_cfg.get("min_frames", 16)),
         stale_sec=float(pc_cfg.get("stale_sec", 5.0)),
+        square=bool(pc_cfg.get("square", True)),
     )
     extractor = PersonClipExtractor(tracker=tracker, clip_buffer=clip_buf)
 
@@ -220,16 +221,6 @@ def run_videomae_demo(
         sm.tick(t)
 
         poses = extractor.tracker.process_frame(frame)
-        if not poses:
-            fh, fw = frame.shape[:2]
-            poses = [
-                PersonPose(
-                    track_id=1,
-                    bbox_xywh=np.array([fw / 2.0, fh / 2.0, float(fw), float(fh)], dtype=np.float32),
-                    keypoints_xyc=np.zeros((17, 3), dtype=np.float32),
-                    score=1.0,
-                )
-            ]
         windows = extractor.clip_buffer.update(t, frame, poses)
         for win in windows:
             p_score = float(pred.predict(win.frames_rgb))

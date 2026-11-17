@@ -68,6 +68,11 @@ def test_expand_bbox_and_crop_with_15pct_margin() -> None:
     assert ex1 == 0 and ey1 == 0
     assert ex2 > ex1 and ey2 > ey1
 
+    # Squared crop test (18% margin + square=True)
+    sq_crop = crop_person_with_margin(frame, bbox, margin_ratio=0.18, square=True)
+    assert sq_crop.shape[0] == sq_crop.shape[1]
+    assert sq_crop.shape[0] >= 200
+
 
 def test_person_clip_buffer_emits_16_frame_videomae_tensor() -> None:
     """Verify per-ID buffer emits uint8 (16, 224, 224, 3) RGB clips matching `videomae_lite.Predictor`."""
@@ -106,6 +111,12 @@ def test_person_clip_buffer_emits_16_frame_videomae_tensor() -> None:
     assert tensor.shape == (16, 3, 224, 224)
     assert tensor.dtype == torch.float32
 
+    # Short track (< min_frames) or empty poses must NOT emit any window
+    short_buf = PersonClipBuffer(clip_sec=2.0, hop_sec=0.5, min_frames=16, square=True)
+    assert short_buf.update(0.0, frame, []) == []
+    for idx in range(5):
+        assert short_buf.update(idx * 0.5, frame, [pose]) == []
+
 
 def test_offline_script_and_realtime_extractor_share_code(tmp_path: Path) -> None:
     """Verify `extract_clips_from_video_file` cuts per-person MP4 clips readable by `videomae_lite`."""
@@ -133,3 +144,4 @@ def test_offline_script_and_realtime_extractor_share_code(tmp_path: Path) -> Non
     frames_back = read_video_frames(saved_files[0], n_frames=16, size=224, train=False)
     assert frames_back.shape == (16, 224, 224, 3)
     assert frames_back.dtype == np.uint8
+

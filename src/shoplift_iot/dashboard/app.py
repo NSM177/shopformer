@@ -11,8 +11,13 @@ import time
 from typing import Any, Iterator, Mapping
 
 import cv2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+try:
+    import httpx
+except ImportError:
+    httpx = None
 import numpy as np
 import paho.mqtt.client as mqtt
 from pydantic import BaseModel
@@ -357,6 +362,10 @@ def create_app(
     app.state.door_controller = door_controller
     app.state.telegram_bot = telegram_bot
 
+    static_assets_dir = Path(__file__).resolve().parent / "static" / "assets"
+    if static_assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(static_assets_dir)), name="assets")
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
         html_content = TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -398,6 +407,24 @@ def create_app(
             "deleted_clips": deleted_clips,
         }
 
+    @app.delete("/api/events/{event_id}")
+    def delete_single_event(event_id: str) -> dict[str, Any]:
+        ev = db.get_event(event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail=f"Event '{event_id}' not found")
+        clip_path = ev.get("clip_path")
+        if clip_path:
+            p = Path(clip_path)
+            c_file = clips_dir / p.name
+            w_file = clips_dir / f"{p.stem}.webm"
+            for f in (c_file, w_file):
+                try:
+                    f.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        db.delete_event(event_id)
+        return {"status": "deleted", "event_id": event_id}
+
     @app.post("/api/events/{event_id}/decision")
     def update_decision(event_id: str, req: DecisionRequest) -> dict[str, Any]:
         if req.decision not in ("confirmed", "ignored"):
@@ -417,6 +444,8 @@ def create_app(
             "door_status": subscriber.door_status,
             "remaining_ttl_sec": round(door_controller.remaining_ttl(), 1),
             "cam_status": subscriber.cam_status,
+            "mqtt_connected": subscriber._running,
+            "store_id": store_id,
             "default_ttl_sec": default_ttl_sec,
             "max_ttl_sec": max_ttl_sec,
             "auto_lock": auto_lock,
@@ -477,6 +506,64 @@ def create_app(
             _stream_mp4_as_mjpeg(target),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
+    pipeline_service_url = os.environ.get("PIPELINE_SERVICE_URL", "http://localhost:8001").rstrip("/")
+
+    @app.get("/api/pipeline/stream/{cam_id}.mjpg")
+    async def proxy_pipeline_stream(cam_id: str) -> StreamingResponse:
+        """Stream live MJPEG feed from pipeline service through dashboard proxy."""
+        if httpx is None:
+            raise HTTPException(status_code=503, detail="Thư viện httpx chưa được cài đặt.")
+        stream_url = f"{pipeline_service_url}/stream/{cam_id}.mjpg"
+
+        async def _iter_mjpeg():
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("GET", stream_url) as resp:
+                    async for chunk in resp.aiter_bytes(chunk_size=4096):
+                        yield chunk
+
+        return StreamingResponse(
+            _iter_mjpeg(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+
+    @app.api_route("/api/pipeline/{subpath:path}", methods=["GET", "POST", "PUT", "DELETE"])
+    async def proxy_to_pipeline(subpath: str, request: Request) -> Response:
+        """Proxy REST calls from dashboard to pipeline service on port 8001."""
+        if httpx is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Thư viện httpx chưa được cài đặt trong môi trường dashboard. Hãy gọi trực tiếp tới cổng 8001.",
+            )
+        target_url = f"{pipeline_service_url}/api/{subpath}"
+        if request.url.query:
+            target_url += f"?{request.url.query}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            req_headers = dict(request.headers)
+            req_headers.pop("host", None)
+            req_headers.pop("content-length", None)
+            body = await request.body()
+            try:
+                resp = await client.request(
+                    method=request.method,
+                    url=target_url,
+                    headers=req_headers,
+                    content=body,
+                )
+                resp_headers = dict(resp.headers)
+                resp_headers.pop("content-encoding", None)
+                resp_headers.pop("content-length", None)
+                return Response(
+                    content=resp.content,
+                    status_code=resp.status_code,
+                    headers=resp_headers,
+                    media_type=resp.headers.get("content-type"),
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Không kết nối được dịch vụ pipeline tại {target_url}: {exc}",
+                ) from exc
 
     return app
 

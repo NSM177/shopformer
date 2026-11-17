@@ -170,3 +170,4 @@ def test_door_controller_fail_safe_on_disconnect_and_invalid_payload(tmp_path: P
 
     ctrl.handle_command(b"{corrupted_json_payload", now=21.0)
     assert ctrl.state == "unlocked"
+

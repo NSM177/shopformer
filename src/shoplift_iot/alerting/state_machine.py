@@ -348,3 +348,4 @@ class DecisionStateMachine:
         else:
             raise ValueError(f"Unsupported door action: {action}")
         return self.get_state(target_tid)
+

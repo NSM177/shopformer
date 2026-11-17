@@ -124,6 +124,13 @@ class EventDatabase:
                 return None
         return self.get_event(event_id)
 
+    def delete_event(self, event_id: str) -> bool:
+        """Delete a single alert event from SQLite by event_id."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM events WHERE event_id = ?", (str(event_id),))
+            conn.commit()
+            return bool(cur.rowcount and cur.rowcount > 0)
+
     def clear_events(self) -> int:
         """Delete all alert events from SQLite and return the number of deleted rows."""
         with self._connect() as conn:

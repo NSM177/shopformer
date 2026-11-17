@@ -9,6 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libgl1 \
+    libgomp1 \
+    ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml /app/pyproject.toml
@@ -21,8 +24,12 @@ COPY demo_videomae.py /app/demo_videomae.py
 RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
     torch \
     torchvision \
+    lapx>=0.5.5 \
+    python-multipart>=0.0.9 \
     && pip install --no-cache-dir -e .
 
-RUN mkdir -p /app/data/clips
+RUN mkdir -p /app/data/clips /app/data/uploads
 
-CMD ["python", "-m", "shoplift_iot.main", "--config", "configs/default.yaml", "--source", "third_party/PoseLift/Samples/Hiding an item in their pants.mp4", "--max-frames", "45"]
+EXPOSE 8001
+
+CMD ["python", "scripts/run_pipeline_service.py", "--host", "0.0.0.0", "--port", "8001"]

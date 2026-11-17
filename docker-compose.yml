@@ -19,13 +19,19 @@ services:
       - MQTT_BROKER_HOST=mosquitto
       - MQTT_BROKER_PORT=1883
       - STORE_ID=${STORE_ID:-store_01}
+      - PIPELINE_SERVICE_URL=${PIPELINE_SERVICE_URL:-http://pipeline:8001}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs:ro
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
     depends_on:
       - mosquitto
+      - pipeline
     restart: unless-stopped
 
   fake_door:
@@ -53,6 +59,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs:ro
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
     depends_on:
       - mosquitto
     restart: unless-stopped
@@ -62,6 +70,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pipeline
     container_name: shopformer-pipeline
+    ports:
+      - "8001:8001"
     environment:
       - MQTT_BROKER_HOST=mosquitto
       - MQTT_BROKER_PORT=1883
@@ -69,12 +79,10 @@ services:
       - CAM_ID=${CAM_ID:-cam_01}
     volumes:
       - ./data:/app/data
-      - ./checkpoints:/app/checkpoints
       - ./configs:/app/configs:ro
-      - ./third_party:/app/third_party:ro
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
       - ./models:/app/models:ro
     depends_on:
       - mosquitto
-      - dashboard
-      - fake_door
-    restart: "no"
+    restart: unless-stopped

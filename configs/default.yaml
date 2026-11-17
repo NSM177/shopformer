@@ -9,6 +9,7 @@ paths:
   shopformer_ckpt: "checkpoints/shopformer_best.pt"
   threshold_file: "checkpoints/threshold.json"
   clips_dir: "data/clips"
+  uploads_dir: "data/uploads"
   db_path: "data/events.db"
 
 video:
@@ -17,20 +18,22 @@ video:
   swap_yx_from_poselift_json: true
 
 pose_track:
-  yolo_model: "models/pretrained/yolov8n-pose.pt"
-  tracker_config: "bytetrack.yaml"
-  conf_threshold: 0.25
+  yolo_model: "models/yolov8s.pt"
+  tracker_config: "configs/bytetrack_cctv.yaml"
+  conf_threshold: 0.15
   iou_threshold: 0.45
+  max_coast_frames: 15
   device: "cuda:0"
 
 person_clips:
-  margin_ratio: 0.15
+  margin_ratio: 0.18
+  square: true
   clip_sec: 3.0
   hop_sec: 1.0
   num_frames: 16
   frame_size: 224
   min_span_ratio: 0.8
-  min_frames: 8
+  min_frames: 16
   stale_sec: 5.0
 
 preprocess:
@@ -78,9 +81,9 @@ evaluation:
 
 alerting:
   calibration_percentile: 99.0
-  default_threshold: 0.30
-  score_smooth_window: 3
-  consecutive_windows_k: 3
+  default_threshold: 0.55
+  score_smooth_window: 2
+  consecutive_windows_k: 2
   cooldown_seconds: 10.0
   wait_admin_seconds: 30.0
   auto_lock: false
@@ -121,5 +124,11 @@ pipeline:
   status_interval_seconds: 5.0
   outbox_poll_interval_seconds: 0.5
   outbox_max_retries: 10
+
+pipeline_service:
+  host: "0.0.0.0"
+  port: 8001
+  bundle_dir: "models/videomae_bundle"
+
 
 

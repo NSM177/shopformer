@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
@@ -22,6 +23,10 @@ from scripts.calibrate_threshold import (  # noqa: E402
 from shoplift_iot.model.scorer import ShopformerScorer  # noqa: E402
 
 
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "checkpoints" / "shopformer_best.pt").exists(),
+    reason="Legacy Shopformer skeleton checkpoints removed in favor of VideoMAE bundle",
+)
 def test_shopformer_scorer_single_and_batch() -> None:
     """Verify ShopformerScorer loads checkpoints and returns non-negative MSE scores."""
     cfg_path = PROJECT_ROOT / "configs" / "default.yaml"
@@ -47,6 +52,10 @@ def test_calibrate_threshold_from_scores_math() -> None:
     assert stats["p50"] < stats["p90"] < stats["p95"] < stats["p99"]
 
 
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "checkpoints").exists(),
+    reason="Legacy Shopformer checkpoints folder removed",
+)
 def test_calibrate_threshold_end_to_end_with_extra_dir() -> None:
     """Verify calibrate_threshold runs on PoseLift train set and writes threshold.json."""
     cfg_path = PROJECT_ROOT / "configs" / "default.yaml"

@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir \
     pyyaml \
     numpy \
     opencv-python-headless \
-    pydantic
+    pydantic \
+    httpx
 
 RUN mkdir -p /app/data/clips
 

@@ -39,8 +39,9 @@ def expand_bbox_xyxy(
     frame_w: int,
     frame_h: int,
     margin_ratio: float = 0.15,
+    square: bool = False,
 ) -> tuple[int, int, int, int]:
-    """Convert `[x_center, y_center, w, h]` to `[x1, y1, x2, y2]` expanded by `margin_ratio` (~15%) and clamped."""
+    """Convert `[x_center, y_center, w, h]` to `[x1, y1, x2, y2]` expanded by `margin_ratio` (~15-20%) and clamped."""
     xc, yc, bw, bh = (
         float(bbox_xywh[0]),
         float(bbox_xywh[1]),
@@ -49,6 +50,19 @@ def expand_bbox_xyxy(
     )
     half_w = bw * (0.5 + float(margin_ratio))
     half_h = bh * (0.5 + float(margin_ratio))
+
+    if square:
+        half_side = max(half_w, half_h)
+        side = min(float(max(frame_w, frame_h)), 2.0 * half_side)
+        half_s = side / 2.0
+        # Shift center inside image bounds so the crop stays square near edges
+        cx = max(half_s, min(float(frame_w) - half_s, xc)) if side <= frame_w else frame_w / 2.0
+        cy = max(half_s, min(float(frame_h) - half_s, yc)) if side <= frame_h else frame_h / 2.0
+        x1 = max(0, min(frame_w - 1, int(round(cx - half_s))))
+        y1 = max(0, min(frame_h - 1, int(round(cy - half_s))))
+        x2 = max(x1 + 1, min(frame_w, int(round(cx + half_s))))
+        y2 = max(y1 + 1, min(frame_h, int(round(cy + half_s))))
+        return x1, y1, x2, y2
 
     x1 = max(0, min(frame_w - 1, int(round(xc - half_w))))
     y1 = max(0, min(frame_h - 1, int(round(yc - half_h))))
@@ -59,13 +73,52 @@ def expand_bbox_xyxy(
 
 def crop_person_with_margin(
     frame_bgr: np.ndarray,
-    bbox_xywh: np.ndarray,
-    margin_ratio: float = 0.15,
+    bbox_xywh: np.ndarray | list[float],
+    margin_ratio: float = 0.18,
+    square: bool = False,
+    other_bboxes: list[np.ndarray | list[float]] | None = None,
+    mask_others: bool = True,
+    mask_color: int = 114,
 ) -> np.ndarray:
-    """Crop the region around a tracked person's bounding box with ~15% padding on each side."""
+    """Crop the region around a tracked person's bounding box with margin, squared, and mask other persons (114)."""
     h, w = frame_bgr.shape[:2]
-    x1, y1, x2, y2 = expand_bbox_xyxy(bbox_xywh, frame_w=w, frame_h=h, margin_ratio=margin_ratio)
-    return np.ascontiguousarray(frame_bgr[y1:y2, x1:x2])
+    x1, y1, x2, y2 = expand_bbox_xyxy(
+        np.asarray(bbox_xywh), frame_w=w, frame_h=h, margin_ratio=margin_ratio, square=square
+    )
+    crop = np.ascontiguousarray(frame_bgr[y1:y2, x1:x2])
+    if square and crop.shape[0] != crop.shape[1]:
+        ch, cw = crop.shape[:2]
+        side = max(ch, cw)
+        pad_top = (side - ch) // 2
+        pad_bottom = side - ch - pad_top
+        pad_left = (side - cw) // 2
+        pad_right = side - cw - pad_left
+        crop = cv2.copyMakeBorder(
+            crop, pad_top, pad_bottom, pad_left, pad_right, cv2.BORDER_REPLICATE
+        )
+
+    if mask_others and other_bboxes:
+        crop = crop.copy()
+        for ob in other_bboxes:
+            ocx, ocy, obw, obh = float(ob[0]), float(ob[1]), float(ob[2]), float(ob[3])
+            ox1 = int(round(ocx - obw / 2.0))
+            oy1 = int(round(ocy - obh / 2.0))
+            ox2 = int(round(ocx + obw / 2.0))
+            oy2 = int(round(ocy + obh / 2.0))
+
+            ix1 = max(x1, ox1)
+            iy1 = max(y1, oy1)
+            ix2 = min(x2, ox2)
+            iy2 = min(y2, oy2)
+
+            if ix2 > ix1 and iy2 > iy1:
+                cx1 = ix1 - x1
+                cy1 = iy1 - y1
+                cx2 = ix2 - x1
+                cy2 = iy2 - y1
+                crop[cy1:cy2, cx1:cx2] = mask_color
+
+    return crop
 
 
 def build_videomae_clip_from_crops(
@@ -90,10 +143,12 @@ class PersonClipBuffer:
         hop_sec: float = 1.0,
         n_frames: int = 16,
         size: int = 224,
-        margin_ratio: float = 0.15,
+        margin_ratio: float = 0.18,
         min_span_ratio: float = 0.8,
-        min_frames: int = 8,
+        min_frames: int = 16,
         stale_sec: float = 5.0,
+        square: bool = True,
+        mask_others: bool = True,
     ) -> None:
         if clip_sec <= 0:
             raise ValueError("clip_sec must be positive.")
@@ -112,6 +167,8 @@ class PersonClipBuffer:
         self.min_span_ratio = float(min_span_ratio)
         self.min_frames = max(1, int(min_frames))
         self.stale_sec = max(0.5, float(stale_sec))
+        self.square = bool(square)
+        self.mask_others = bool(mask_others)
 
         self._buffers: dict[int, deque[tuple[float, np.ndarray, np.ndarray]]] = {}
         self._next_eval: dict[int, float] = {}
@@ -130,7 +187,17 @@ class PersonClipBuffer:
 
         for pose in poses:
             tid = int(pose.track_id)
-            crop = crop_person_with_margin(frame_bgr, pose.bbox_xywh, margin_ratio=self.margin_ratio)
+            other_bboxes = [
+                o.bbox_xywh.copy() for o in poses if int(o.track_id) != tid
+            ]
+            crop = crop_person_with_margin(
+                frame_bgr,
+                pose.bbox_xywh,
+                margin_ratio=self.margin_ratio,
+                square=self.square,
+                other_bboxes=other_bboxes,
+                mask_others=self.mask_others,
+            )
             buf = self._buffers.setdefault(tid, deque())
             buf.append((ts, crop, pose.bbox_xywh.copy()))
             self._last_seen[tid] = ts
@@ -148,10 +215,15 @@ class PersonClipBuffer:
                 and ts + 1e-6 >= self._next_eval[tid]
             ):
                 self._next_eval[tid] = ts + self.hop_sec
-                raw_crops = [item[1] for item in buf]
-                frames_rgb = build_videomae_clip_from_crops(
-                    raw_crops, n_frames=self.n_frames, size=self.size
-                )
+
+                # Lấy 16 khung đều nhau theo THỜI GIAN trong cửa sổ thời gian thực
+                buf_ts = np.array([item[0] for item in buf])
+                target_ts = np.linspace(buf[0][0], buf[-1][0], self.n_frames)
+                sel_indices = [int(np.argmin(np.abs(buf_ts - tgt))) for tgt in target_ts]
+                rgb_list = [resize_rgb(buf[idx][1], size=self.size) for idx in sel_indices]
+                frames_rgb = np.stack(rgb_list, axis=0).astype(np.uint8)
+                raw_crops = [buf[idx][1] for idx in sel_indices]
+
                 ready.append(
                     PersonClipWindow(
                         track_id=tid,
@@ -174,10 +246,12 @@ class PersonClipBuffer:
         for tid, buf in list(self._buffers.items()):
             if tid in self._emitted_tracks or len(buf) < req:
                 continue
-            raw_crops = [item[1] for item in buf]
-            frames_rgb = build_videomae_clip_from_crops(
-                raw_crops, n_frames=self.n_frames, size=self.size
-            )
+            buf_ts = np.array([item[0] for item in buf])
+            target_ts = np.linspace(buf[0][0], buf[-1][0], self.n_frames)
+            sel_indices = [int(np.argmin(np.abs(buf_ts - tgt))) for tgt in target_ts]
+            rgb_list = [resize_rgb(buf[idx][1], size=self.size) for idx in sel_indices]
+            frames_rgb = np.stack(rgb_list, axis=0).astype(np.uint8)
+            raw_crops = [buf[idx][1] for idx in sel_indices]
             flushed.append(
                 PersonClipWindow(
                     track_id=tid,
@@ -238,10 +312,11 @@ class PersonClipExtractor:
             hop_sec=float(hop_sec_override if hop_sec_override is not None else pc_cfg.get("hop_sec", 1.0)),
             n_frames=int(n_frames_override if n_frames_override is not None else pc_cfg.get("num_frames", 16)),
             size=int(size_override if size_override is not None else pc_cfg.get("frame_size", 224)),
-            margin_ratio=float(pc_cfg.get("margin_ratio", 0.15)),
+            margin_ratio=float(pc_cfg.get("margin_ratio", 0.18)),
             min_span_ratio=float(pc_cfg.get("min_span_ratio", 0.8)),
-            min_frames=int(pc_cfg.get("min_frames", 8)),
+            min_frames=int(pc_cfg.get("min_frames", 16)),
             stale_sec=float(pc_cfg.get("stale_sec", 5.0)),
+            square=bool(pc_cfg.get("square", True)),
         )
         return cls(tracker=tracker, clip_buffer=clip_buffer)
 

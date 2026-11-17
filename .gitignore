@@ -10,6 +10,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.playwright-mcp/
 
 # Packaging / build artifacts
 build/
@@ -17,9 +18,35 @@ dist/
 *.egg-info/
 src/*.egg-info/
 
-# Dataset, clips, archives, and runtime databases
+# Dataset, data builds, clips, archives, and runtime databases
 data/
+dataset/
+dataset_build/
+dataset_final/
 clips/
+
+# Data checking tools, helpers, label tools and outputs
+check_out/
+check_data.py
+checkdata.py
+label_helper.py
+label_tool/
+run_label_tool.bat
+
+# Dataset processing, check & packaging scripts
+scripts/auto_label_ucf.py
+scripts/build_step*.py
+scripts/generate_ucf_normal_sheets.py
+scripts/package_kaggle_dataset.py
+scripts/run_step*.py
+scripts/update_label_tool_html.py
+scripts/verify_package.py
+
+# CSV reports and inspection files
+*.csv
+!configs/**/*.csv
+
+# Runtime databases and archives
 *.db
 *.db-journal
 *.db-wal

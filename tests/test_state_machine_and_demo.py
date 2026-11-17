@@ -184,3 +184,4 @@ def test_demo_videomae_with_person_clips_emits_single_alert(tmp_path: Path) -> N
     payload = ev.to_dict()
     assert tuple(payload.keys()) == REQUIRED_KEYS
     assert len(list(clips_out.glob("*.mp4"))) == 1
+

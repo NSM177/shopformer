@@ -1,260 +1,1208 @@
 {
-    "model": "VideoMAE fine-tune (2 lớp)",
-    "base": "MCG-NJU/videomae-base-finetuned-kinetics",
-    "license_note": "Model gốc CC BY-NC 4.0: chỉ dùng phi thương mại",
-    "metrics_test": {
-        "test_clips": 46,
-        "auc": 0.9352380952380951,
-        "accuracy": 0.8913043478260869,
-        "precision": 0.9166666666666666,
-        "recall": 0.88,
-        "f1": 0.8979591836734694,
-        "threshold": 0.5862888097763062
-    },
-    "history": [
-        {
-            "epoch": 1,
-            "train_loss": 0.6519192823576271,
-            "val_auc": 0.8235294117647058,
-            "val_acc": 0.7037037037037037
+  "model": "VideoMAE fine-tune person-crop (2 lớp)",
+  "base": "MCG-NJU/videomae-base-finetuned-kinetics",
+  "license_note": "Model gốc CC BY-NC 4.0: chỉ dùng phi thương mại",
+  "metrics_test": {
+    "test_window_auc": 0.39238417342406584,
+    "test_caught": 0,
+    "test_missed": 3,
+    "test_false_alarms": 1,
+    "test_normal_minutes": 10.216666666666667,
+    "test_fa_per_min": 0.09787928221859707,
+    "rule": {
+      "threshold": 0.75,
+      "smooth": 2,
+      "k": 2
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.47275456680228917,
+      "val_auc_all": 0.9210240273638444,
+      "val_auc": 0.8713935941897049,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.8959711199294532,
+          "pos": 288,
+          "neg": 252
         },
-        {
-            "epoch": 2,
-            "train_loss": 0.4166884928121479,
-            "val_auc": 0.9176470588235294,
-            "val_acc": 0.7407407407407407
-        },
-        {
-            "epoch": 3,
-            "train_loss": 0.314978921973924,
-            "val_auc": 0.9294117647058824,
-            "val_acc": 0.7777777777777778
-        },
-        {
-            "epoch": 4,
-            "train_loss": 0.1831900529358365,
-            "val_auc": 0.9411764705882353,
-            "val_acc": 0.8888888888888888
-        },
-        {
-            "epoch": 5,
-            "train_loss": 0.1568362565899114,
-            "val_auc": 0.9117647058823529,
-            "val_acc": 0.7777777777777778
-        },
-        {
-            "epoch": 6,
-            "train_loss": 0.09572714466362371,
-            "val_auc": 0.9117647058823529,
-            "val_acc": 0.7407407407407407
-        },
-        {
-            "epoch": 7,
-            "train_loss": 0.07473872830117241,
-            "val_auc": 0.9117647058823529,
-            "val_acc": 0.7407407407407407
-        },
-        {
-            "epoch": 8,
-            "train_loss": 0.07282113631623327,
-            "val_auc": 0.9117647058823529,
-            "val_acc": 0.7407407407407407
+        "ucf-shopp": {
+          "auc": 0.8468160684499565,
+          "pos": 78,
+          "neg": 4627
         }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.19156493498689342,
+      "val_auc_all": 0.8887447821991652,
+      "val_auc": 0.8038126020162786,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.8733121141975309,
+          "pos": 288,
+          "neg": 252
+        },
+        "ucf-shopp": {
+          "auc": 0.7343130898350263,
+          "pos": 78,
+          "neg": 4627
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.11748401082770604,
+      "val_auc_all": 0.9006708241073319,
+      "val_auc": 0.8331025403839638,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.8642802028218695,
+          "pos": 288,
+          "neg": 252
+        },
+        "ucf-shopp": {
+          "auc": 0.801924877946058,
+          "pos": 78,
+          "neg": 4627
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.06720237875526128,
+      "val_auc_all": 0.913203906112625,
+      "val_auc": 0.8441417024549431,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.8710179673721341,
+          "pos": 288,
+          "neg": 252
+        },
+        "ucf-shopp": {
+          "auc": 0.8172654375377522,
+          "pos": 78,
+          "neg": 4627
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.05067109190673864,
+      "val_auc_all": 0.9103414656546345,
+      "val_auc": 0.8387668458504944,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.871086860670194,
+          "pos": 288,
+          "neg": 252
+        },
+        "ucf-shopp": {
+          "auc": 0.8064468310307947,
+          "pos": 78,
+          "neg": 4627
+        }
+      }
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.040833052076812544,
+      "val_auc_all": 0.9109336657493865,
+      "val_auc": 0.8411626862551519,
+      "by_source": {
+        "shoplifting-video-dataset": {
+          "auc": 0.8704048170194003,
+          "pos": 288,
+          "neg": 252
+        },
+        "ucf-shopp": {
+          "auc": 0.8119205554909035,
+          "pos": 78,
+          "neg": 4627
+        }
+      }
+    }
+  ],
+  "split": {
+    "train_videos": [
+      "Normal_Videos_003_x264.mp4",
+      "Normal_Videos_006_x264.mp4",
+      "Normal_Videos_010_x264.mp4",
+      "Normal_Videos_014_x264.mp4",
+      "Normal_Videos_015_x264.mp4",
+      "Normal_Videos_018_x264.mp4",
+      "Normal_Videos_024_x264.mp4",
+      "Normal_Videos_025_x264.mp4",
+      "Normal_Videos_027_x264.mp4",
+      "Normal_Videos_033_x264.mp4",
+      "Normal_Videos_034_x264.mp4",
+      "Normal_Videos_041_x264.mp4",
+      "Normal_Videos_042_x264.mp4",
+      "Normal_Videos_048_x264.mp4",
+      "Normal_Videos_051_x264.mp4",
+      "Normal_Videos_059_x264.mp4",
+      "Normal_Videos_063_x264.mp4",
+      "Normal_Videos_067_x264.mp4",
+      "Normal_Videos_070_x264.mp4",
+      "Normal_Videos_100_x264.mp4",
+      "Normal_Videos_150_x264.mp4",
+      "Normal_Videos_168_x264.mp4",
+      "Normal_Videos_175_x264.mp4",
+      "Normal_Videos_189_x264.mp4",
+      "Normal_Videos_196_x264.mp4",
+      "Normal_Videos_210_x264.mp4",
+      "Normal_Videos_217_x264.mp4",
+      "Normal_Videos_246_x264.mp4",
+      "Normal_Videos_247_x264.mp4",
+      "Normal_Videos_248_x264.mp4",
+      "Normal_Videos_251_x264.mp4",
+      "Normal_Videos_310_x264.mp4",
+      "Normal_Videos_317_x264.mp4",
+      "Normal_Videos_345_x264.mp4",
+      "Normal_Videos_352_x264.mp4",
+      "Normal_Videos_401_x264.mp4",
+      "Normal_Videos_439_x264.mp4",
+      "Normal_Videos_452_x264.mp4",
+      "Normal_Videos_478_x264.mp4",
+      "Normal_Videos_576_x264.mp4",
+      "Normal_Videos_597_x264.mp4",
+      "Normal_Videos_603_x264.mp4",
+      "Normal_Videos_606_x264.mp4",
+      "Normal_Videos_621_x264.mp4",
+      "Normal_Videos_634_x264.mp4",
+      "Normal_Videos_641_x264.mp4",
+      "Normal_Videos_656_x264.mp4",
+      "Normal_Videos_686_x264.mp4",
+      "Normal_Videos_696_x264.mp4",
+      "Normal_Videos_702_x264.mp4",
+      "Normal_Videos_704_x264.mp4",
+      "Normal_Videos_710_x264.mp4",
+      "Normal_Videos_717_x264.mp4",
+      "Normal_Videos_725_x264.mp4",
+      "Normal_Videos_745_x264.mp4",
+      "Normal_Videos_758_x264.mp4",
+      "Normal_Videos_778_x264.mp4",
+      "Normal_Videos_801_x264.mp4",
+      "Normal_Videos_828_x264.mp4",
+      "Normal_Videos_831_x264.mp4",
+      "Normal_Videos_866_x264.mp4",
+      "Normal_Videos_867_x264.mp4",
+      "Normal_Videos_869_x264.mp4",
+      "Normal_Videos_870_x264.mp4",
+      "Normal_Videos_872_x264.mp4",
+      "Normal_Videos_873_x264.mp4",
+      "Normal_Videos_874_x264.mp4",
+      "Normal_Videos_875_x264.mp4",
+      "Normal_Videos_876_x264.mp4",
+      "Normal_Videos_877_x264.mp4",
+      "Normal_Videos_878_x264.mp4",
+      "Normal_Videos_879_x264.mp4",
+      "Normal_Videos_880_x264.mp4",
+      "Normal_Videos_881_x264.mp4",
+      "Normal_Videos_882_x264.mp4",
+      "Normal_Videos_886_x264.mp4",
+      "Normal_Videos_887_x264.mp4",
+      "Normal_Videos_888_x264.mp4",
+      "Normal_Videos_890_x264.mp4",
+      "Normal_Videos_892_x264.mp4",
+      "Normal_Videos_893_x264.mp4",
+      "Normal_Videos_894_x264.mp4",
+      "Normal_Videos_896_x264.mp4",
+      "Normal_Videos_897_x264.mp4",
+      "Normal_Videos_898_x264.mp4",
+      "Normal_Videos_899_x264.mp4",
+      "Normal_Videos_900_x264.mp4",
+      "Normal_Videos_904_x264.mp4",
+      "Normal_Videos_905_x264.mp4",
+      "Normal_Videos_906_x264.mp4",
+      "Normal_Videos_907_x264.mp4",
+      "Normal_Videos_908_x264.mp4",
+      "Normal_Videos_912_x264.mp4",
+      "Normal_Videos_913_x264.mp4",
+      "Normal_Videos_914_x264.mp4",
+      "Normal_Videos_915_x264.mp4",
+      "Normal_Videos_925_x264.mp4",
+      "Normal_Videos_926_x264.mp4",
+      "Normal_Videos_927_x264.mp4",
+      "Normal_Videos_928_x264.mp4",
+      "Normal_Videos_930_x264.mp4",
+      "Normal_Videos_931_x264.mp4",
+      "Normal_Videos_933_x264.mp4",
+      "Normal_Videos_938_x264.mp4",
+      "Normal_Videos_939_x264.mp4",
+      "Normal_Videos_941_x264.mp4",
+      "Normal_Videos_943_x264.mp4",
+      "Normal_Videos_944_x264.mp4",
+      "Shoplifting001_x264.mp4",
+      "Shoplifting005_x264.mp4",
+      "Shoplifting007_x264.mp4",
+      "Shoplifting010_x264.mp4",
+      "Shoplifting016_x264.mp4",
+      "Shoplifting017_x264.mp4",
+      "Shoplifting028_x264.mp4",
+      "Shoplifting029_x264.mp4",
+      "Shoplifting031_x264.mp4",
+      "Shoplifting033_x264.mp4",
+      "Shoplifting034_x264.mp4",
+      "Shoplifting037_x264.mp4",
+      "Shoplifting049_x264.mp4",
+      "normal-10.mp4",
+      "normal-11.mp4",
+      "normal-13.mp4",
+      "normal-14.mp4",
+      "normal-15.mp4",
+      "normal-16.mp4",
+      "normal-17.mp4",
+      "normal-18.mp4",
+      "normal-19.mp4",
+      "normal-2.mp4",
+      "normal-20.mp4",
+      "normal-21.mp4",
+      "normal-22.mp4",
+      "normal-23.mp4",
+      "normal-24.mp4",
+      "normal-26.mp4",
+      "normal-27.mp4",
+      "normal-28.mp4",
+      "normal-29.mp4",
+      "normal-3.mp4",
+      "normal-30.mp4",
+      "normal-32.mp4",
+      "normal-33.mp4",
+      "normal-34.mp4",
+      "normal-35.mp4",
+      "normal-36.mp4",
+      "normal-37.mp4",
+      "normal-39.mp4",
+      "normal-4.mp4",
+      "normal-40.mp4",
+      "normal-41.mp4",
+      "normal-42.mp4",
+      "normal-43.mp4",
+      "normal-44.mp4",
+      "normal-45.mp4",
+      "normal-46.mp4",
+      "normal-47.mp4",
+      "normal-48.mp4",
+      "normal-49.mp4",
+      "normal-5.mp4",
+      "normal-50.mp4",
+      "normal-53.mp4",
+      "normal-54.mp4",
+      "normal-55.mp4",
+      "normal-57.mp4",
+      "normal-58.mp4",
+      "normal-59.mp4",
+      "normal-60.mp4",
+      "normal-61.mp4",
+      "normal-62.mp4",
+      "normal-63.mp4",
+      "normal-64.mp4",
+      "normal-73.mp4",
+      "normal-74.mp4",
+      "normal-75.mp4",
+      "normal-76.mp4",
+      "normal-77.mp4",
+      "normal-78.mp4",
+      "normal-79.mp4",
+      "normal-8.mp4",
+      "normal-80.mp4",
+      "normal-81.mp4",
+      "normal-82.mp4",
+      "normal-83.mp4",
+      "normal-84.mp4",
+      "normal-85.mp4",
+      "normal-86.mp4",
+      "normal-87.mp4",
+      "normal-89.mp4",
+      "normal-9.mp4",
+      "shoplifting-1.mp4",
+      "shoplifting-10.mp4",
+      "shoplifting-11.mp4",
+      "shoplifting-12.mp4",
+      "shoplifting-13.mp4",
+      "shoplifting-19.mp4",
+      "shoplifting-20.mp4",
+      "shoplifting-21.mp4",
+      "shoplifting-23.mp4",
+      "shoplifting-24.mp4",
+      "shoplifting-25.mp4",
+      "shoplifting-26.mp4",
+      "shoplifting-27.mp4",
+      "shoplifting-28.mp4",
+      "shoplifting-29.mp4",
+      "shoplifting-3.mp4",
+      "shoplifting-30.mp4",
+      "shoplifting-31.mp4",
+      "shoplifting-32.mp4",
+      "shoplifting-33.mp4",
+      "shoplifting-35.mp4",
+      "shoplifting-36.mp4",
+      "shoplifting-37.mp4",
+      "shoplifting-38.mp4",
+      "shoplifting-39.mp4",
+      "shoplifting-4.mp4",
+      "shoplifting-40.mp4",
+      "shoplifting-41.mp4",
+      "shoplifting-42.mp4",
+      "shoplifting-43.mp4",
+      "shoplifting-44.mp4",
+      "shoplifting-45.mp4",
+      "shoplifting-46.mp4",
+      "shoplifting-48.mp4",
+      "shoplifting-5.mp4",
+      "shoplifting-51.mp4",
+      "shoplifting-52.mp4",
+      "shoplifting-53.mp4",
+      "shoplifting-54.mp4",
+      "shoplifting-55.mp4",
+      "shoplifting-56.mp4",
+      "shoplifting-57.mp4",
+      "shoplifting-58.mp4",
+      "shoplifting-59.mp4",
+      "shoplifting-6.mp4",
+      "shoplifting-60.mp4",
+      "shoplifting-61.mp4",
+      "shoplifting-62.mp4",
+      "shoplifting-63.mp4",
+      "shoplifting-64.mp4",
+      "shoplifting-65.mp4",
+      "shoplifting-66.mp4",
+      "shoplifting-67.mp4",
+      "shoplifting-68.mp4",
+      "shoplifting-69.mp4",
+      "shoplifting-7.mp4",
+      "shoplifting-70.mp4",
+      "shoplifting-8.mp4",
+      "shoplifting-87.mp4",
+      "shoplifting-9.mp4"
     ],
-    "split": {
-        "train": [
-            "normal-1",
-            "normal-12",
-            "normal-13",
-            "normal-17",
-            "normal-19",
-            "normal-2",
-            "normal-21",
-            "normal-23",
-            "normal-24",
-            "normal-26",
-            "normal-27",
-            "normal-30",
-            "normal-31",
-            "normal-32",
-            "normal-33",
-            "normal-34",
-            "normal-37",
-            "normal-4",
-            "normal-41",
-            "normal-42",
-            "normal-43",
-            "normal-44",
-            "normal-46",
-            "normal-48",
-            "normal-53",
-            "normal-54",
-            "normal-55",
-            "normal-57",
-            "normal-58",
-            "normal-6",
-            "normal-60",
-            "normal-64",
-            "normal-65",
-            "normal-66",
-            "normal-68",
-            "normal-69",
-            "normal-7",
-            "normal-70",
-            "normal-72",
-            "normal-73",
-            "normal-75",
-            "normal-76",
-            "normal-78",
-            "normal-79",
-            "normal-8",
-            "normal-80",
-            "normal-81",
-            "normal-82",
-            "normal-85",
-            "normal-86",
-            "normal-87",
-            "normal-88",
-            "shoplifting-1",
-            "shoplifting-10",
-            "shoplifting-11",
-            "shoplifting-12",
-            "shoplifting-15",
-            "shoplifting-17",
-            "shoplifting-20",
-            "shoplifting-21",
-            "shoplifting-22",
-            "shoplifting-25",
-            "shoplifting-29",
-            "shoplifting-3",
-            "shoplifting-30",
-            "shoplifting-31",
-            "shoplifting-34",
-            "shoplifting-35",
-            "shoplifting-36",
-            "shoplifting-37",
-            "shoplifting-39",
-            "shoplifting-40",
-            "shoplifting-41",
-            "shoplifting-42",
-            "shoplifting-43",
-            "shoplifting-44",
-            "shoplifting-45",
-            "shoplifting-46",
-            "shoplifting-47",
-            "shoplifting-5",
-            "shoplifting-51",
-            "shoplifting-52",
-            "shoplifting-53",
-            "shoplifting-55",
-            "shoplifting-56",
-            "shoplifting-57",
-            "shoplifting-58",
-            "shoplifting-59",
-            "shoplifting-6",
-            "shoplifting-60",
-            "shoplifting-64",
-            "shoplifting-66",
-            "shoplifting-67",
-            "shoplifting-69",
-            "shoplifting-70",
-            "shoplifting-72",
-            "shoplifting-74",
-            "shoplifting-75",
-            "shoplifting-78",
-            "shoplifting-79",
-            "shoplifting-8",
-            "shoplifting-81",
-            "shoplifting-82",
-            "shoplifting-86",
-            "shoplifting-87",
-            "shoplifting-88",
-            "shoplifting-90",
-            "shoplifting-91",
-            "shoplifting-93"
-        ],
-        "val": [
-            "normal-10",
-            "normal-11",
-            "normal-15",
-            "normal-16",
-            "normal-18",
-            "normal-22",
-            "normal-25",
-            "normal-29",
-            "normal-38",
-            "normal-47",
-            "normal-5",
-            "normal-50",
-            "normal-51",
-            "normal-61",
-            "normal-67",
-            "normal-83",
-            "normal-84",
-            "shoplifting-13",
-            "shoplifting-14",
-            "shoplifting-24",
-            "shoplifting-38",
-            "shoplifting-61",
-            "shoplifting-63",
-            "shoplifting-65",
-            "shoplifting-73",
-            "shoplifting-80",
-            "shoplifting-92"
-        ],
-        "test": [
-            "normal-14",
-            "normal-20",
-            "normal-28",
-            "normal-3",
-            "normal-35",
-            "normal-36",
-            "normal-39",
-            "normal-40",
-            "normal-45",
-            "normal-49",
-            "normal-52",
-            "normal-56",
-            "normal-59",
-            "normal-62",
-            "normal-63",
-            "normal-71",
-            "normal-74",
-            "normal-77",
-            "normal-89",
-            "normal-9",
-            "normal-90",
-            "shoplifting-16",
-            "shoplifting-18",
-            "shoplifting-19",
-            "shoplifting-2",
-            "shoplifting-23",
-            "shoplifting-26",
-            "shoplifting-27",
-            "shoplifting-28",
-            "shoplifting-32",
-            "shoplifting-33",
-            "shoplifting-4",
-            "shoplifting-48",
-            "shoplifting-50",
-            "shoplifting-54",
-            "shoplifting-62",
-            "shoplifting-68",
-            "shoplifting-7",
-            "shoplifting-71",
-            "shoplifting-76",
-            "shoplifting-77",
-            "shoplifting-83",
-            "shoplifting-84",
-            "shoplifting-85",
-            "shoplifting-89",
-            "shoplifting-9"
-        ]
-    },
-    "clips": {
-        "train": 109,
-        "val": 27,
-        "test": 46
-    },
-    "trained_at": "2026-11-14 16:12"
+    "val_videos": [
+      "Normal_Videos_019_x264.mp4",
+      "Normal_Videos_050_x264.mp4",
+      "Normal_Videos_056_x264.mp4",
+      "Normal_Videos_129_x264.mp4",
+      "Normal_Videos_182_x264.mp4",
+      "Normal_Videos_203_x264.mp4",
+      "Normal_Videos_224_x264.mp4",
+      "Normal_Videos_289_x264.mp4",
+      "Normal_Videos_312_x264.mp4",
+      "Normal_Videos_360_x264.mp4",
+      "Normal_Videos_365_x264.mp4",
+      "Normal_Videos_417_x264.mp4",
+      "Normal_Videos_453_x264.mp4",
+      "Normal_Videos_722_x264.mp4",
+      "Normal_Videos_780_x264.mp4",
+      "Normal_Videos_782_x264.mp4",
+      "Normal_Videos_798_x264.mp4",
+      "Normal_Videos_883_x264.mp4",
+      "Normal_Videos_884_x264.mp4",
+      "Normal_Videos_885_x264.mp4",
+      "Normal_Videos_889_x264.mp4",
+      "Normal_Videos_891_x264.mp4",
+      "Normal_Videos_895_x264.mp4",
+      "Normal_Videos_901_x264.mp4",
+      "Normal_Videos_902_x264.mp4",
+      "Normal_Videos_903_x264.mp4",
+      "Normal_Videos_909_x264.mp4",
+      "Normal_Videos_910_x264.mp4",
+      "Normal_Videos_911_x264.mp4",
+      "Normal_Videos_923_x264.mp4",
+      "Normal_Videos_929_x264.mp4",
+      "Normal_Videos_932_x264.mp4",
+      "Normal_Videos_934_x264.mp4",
+      "Normal_Videos_936_x264.mp4",
+      "Normal_Videos_940_x264.mp4",
+      "Shoplifting004_x264.mp4",
+      "Shoplifting020_x264.mp4",
+      "Shoplifting021_x264.mp4",
+      "Shoplifting022_x264.mp4",
+      "Shoplifting039_x264.mp4",
+      "Shoplifting044_x264.mp4",
+      "normal-1.mp4",
+      "normal-12.mp4",
+      "normal-25.mp4",
+      "normal-31.mp4",
+      "normal-38.mp4",
+      "normal-6.mp4",
+      "normal-65.mp4",
+      "normal-66.mp4",
+      "normal-67.mp4",
+      "normal-68.mp4",
+      "normal-69.mp4",
+      "normal-7.mp4",
+      "normal-70.mp4",
+      "normal-71.mp4",
+      "normal-72.mp4",
+      "normal-88.mp4",
+      "normal-90.mp4",
+      "shoplifting-14.mp4",
+      "shoplifting-15.mp4",
+      "shoplifting-16.mp4",
+      "shoplifting-17.mp4",
+      "shoplifting-18.mp4",
+      "shoplifting-2.mp4",
+      "shoplifting-22.mp4",
+      "shoplifting-34.mp4",
+      "shoplifting-47.mp4",
+      "shoplifting-50.mp4",
+      "shoplifting-71.mp4",
+      "shoplifting-72.mp4",
+      "shoplifting-73.mp4",
+      "shoplifting-74.mp4",
+      "shoplifting-75.mp4",
+      "shoplifting-76.mp4",
+      "shoplifting-77.mp4",
+      "shoplifting-78.mp4",
+      "shoplifting-79.mp4",
+      "shoplifting-80.mp4",
+      "shoplifting-81.mp4",
+      "shoplifting-82.mp4",
+      "shoplifting-83.mp4",
+      "shoplifting-84.mp4",
+      "shoplifting-85.mp4",
+      "shoplifting-86.mp4",
+      "shoplifting-88.mp4",
+      "shoplifting-89.mp4",
+      "shoplifting-90.mp4",
+      "shoplifting-91.mp4",
+      "shoplifting-92.mp4",
+      "shoplifting-93.mp4"
+    ],
+    "test_videos": [
+      "Normal_Videos_781_x264.mp4",
+      "Normal_Videos_783_x264.mp4",
+      "Normal_Videos_868_x264.mp4",
+      "Normal_Videos_871_x264.mp4",
+      "Normal_Videos_924_x264.mp4",
+      "Normal_Videos_935_x264.mp4",
+      "Shoplifting015_x264.mp4",
+      "Shoplifting027_x264.mp4"
+    ]
+  },
+  "windows": {
+    "train": 1252,
+    "val": 5245,
+    "test": 2242
+  },
+  "annotations": {
+    "Shoplifting015_x264.mp4": [
+      [
+        67.0,
+        72.0
+      ]
+    ],
+    "Shoplifting027_x264.mp4": [
+      [
+        36.0,
+        38.666666666666664
+      ],
+      [
+        49.0,
+        57.0
+      ]
+    ],
+    "Shoplifting028_x264.mp4": [
+      [
+        19.0,
+        28.0
+      ]
+    ],
+    "Shoplifting029_x264.mp4": [
+      [
+        34.0,
+        49.0
+      ]
+    ],
+    "Shoplifting039_x264.mp4": [
+      [
+        73.0,
+        78.0
+      ]
+    ],
+    "Shoplifting044_x264.mp4": [
+      [
+        369.0,
+        375.0
+      ]
+    ],
+    "Shoplifting001_x264.mp4": [
+      [
+        51.666666666666664,
+        66.66666666666667
+      ]
+    ],
+    "Shoplifting004_x264.mp4": [
+      [
+        73.33333333333333,
+        163.33333333333334
+      ]
+    ],
+    "Shoplifting010_x264.mp4": [
+      [
+        25.0,
+        30.666666666666668
+      ],
+      [
+        51.666666666666664,
+        65.66666666666667
+      ]
+    ],
+    "Shoplifting016_x264.mp4": [
+      [
+        21.0,
+        24.0
+      ]
+    ],
+    "Shoplifting017_x264.mp4": [
+      [
+        12.0,
+        14.0
+      ]
+    ],
+    "Shoplifting020_x264.mp4": [
+      [
+        78.0,
+        82.0
+      ]
+    ],
+    "Shoplifting021_x264.mp4": [
+      [
+        69.0,
+        74.0
+      ]
+    ],
+    "Shoplifting022_x264.mp4": [
+      [
+        9.0,
+        14.0
+      ],
+      [
+        48.0,
+        52.0
+      ]
+    ],
+    "Shoplifting031_x264.mp4": [
+      [
+        4.0,
+        11.0
+      ]
+    ],
+    "Shoplifting033_x264.mp4": [
+      [
+        21.0,
+        25.0
+      ]
+    ],
+    "Shoplifting034_x264.mp4": [
+      [
+        245.0,
+        249.0
+      ]
+    ],
+    "Shoplifting037_x264.mp4": [
+      [
+        38.0,
+        40.0
+      ]
+    ],
+    "Shoplifting049_x264.mp4": [
+      [
+        34.0,
+        45.0
+      ]
+    ],
+    "Shoplifting005_x264.mp4": [
+      [
+        24.0,
+        31.0
+      ]
+    ],
+    "Shoplifting007_x264.mp4": [
+      [
+        18.333333333333332,
+        25.333333333333332
+      ],
+      [
+        154.33333333333334,
+        164.0
+      ]
+    ],
+    "shoplifting-1.mp4": [
+      [
+        0.0,
+        10.366666666666667
+      ]
+    ],
+    "shoplifting-10.mp4": [
+      [
+        0.0,
+        10.7
+      ]
+    ],
+    "shoplifting-11.mp4": [
+      [
+        0.0,
+        11.466666666666667
+      ]
+    ],
+    "shoplifting-12.mp4": [
+      [
+        0.0,
+        10.733333333333333
+      ]
+    ],
+    "shoplifting-13.mp4": [
+      [
+        0.0,
+        11.133333333333333
+      ]
+    ],
+    "shoplifting-14.mp4": [
+      [
+        0.0,
+        10.833333333333334
+      ]
+    ],
+    "shoplifting-15.mp4": [
+      [
+        0.0,
+        10.4
+      ]
+    ],
+    "shoplifting-16.mp4": [
+      [
+        0.0,
+        10.2
+      ]
+    ],
+    "shoplifting-17.mp4": [
+      [
+        0.0,
+        10.7
+      ]
+    ],
+    "shoplifting-18.mp4": [
+      [
+        0.0,
+        11.366666666666667
+      ]
+    ],
+    "shoplifting-19.mp4": [
+      [
+        0.0,
+        10.166666666666666
+      ]
+    ],
+    "shoplifting-2.mp4": [
+      [
+        0.0,
+        11.366666666666667
+      ]
+    ],
+    "shoplifting-20.mp4": [
+      [
+        0.0,
+        11.166666666666666
+      ]
+    ],
+    "shoplifting-21.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-22.mp4": [
+      [
+        0.0,
+        10.866666666666667
+      ]
+    ],
+    "shoplifting-23.mp4": [
+      [
+        0.0,
+        11.166666666666666
+      ]
+    ],
+    "shoplifting-24.mp4": [
+      [
+        0.0,
+        10.9
+      ]
+    ],
+    "shoplifting-25.mp4": [
+      [
+        0.0,
+        11.166666666666666
+      ]
+    ],
+    "shoplifting-26.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-27.mp4": [
+      [
+        0.0,
+        10.3
+      ]
+    ],
+    "shoplifting-28.mp4": [
+      [
+        0.0,
+        11.133333333333333
+      ]
+    ],
+    "shoplifting-29.mp4": [
+      [
+        0.0,
+        11.566666666666666
+      ]
+    ],
+    "shoplifting-3.mp4": [
+      [
+        0.0,
+        11.166666666666666
+      ]
+    ],
+    "shoplifting-30.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-31.mp4": [
+      [
+        0.0,
+        10.533333333333333
+      ]
+    ],
+    "shoplifting-32.mp4": [
+      [
+        0.0,
+        10.733333333333333
+      ]
+    ],
+    "shoplifting-33.mp4": [
+      [
+        0.0,
+        10.9
+      ]
+    ],
+    "shoplifting-34.mp4": [
+      [
+        0.0,
+        10.0
+      ]
+    ],
+    "shoplifting-35.mp4": [
+      [
+        0.0,
+        10.433333333333334
+      ]
+    ],
+    "shoplifting-36.mp4": [
+      [
+        0.0,
+        9.1
+      ]
+    ],
+    "shoplifting-37.mp4": [
+      [
+        0.0,
+        10.966666666666667
+      ]
+    ],
+    "shoplifting-38.mp4": [
+      [
+        0.0,
+        10.6
+      ]
+    ],
+    "shoplifting-39.mp4": [
+      [
+        0.0,
+        11.533333333333333
+      ]
+    ],
+    "shoplifting-4.mp4": [
+      [
+        0.0,
+        11.433333333333334
+      ]
+    ],
+    "shoplifting-40.mp4": [
+      [
+        0.0,
+        10.8
+      ]
+    ],
+    "shoplifting-41.mp4": [
+      [
+        0.0,
+        7.033333333333333
+      ]
+    ],
+    "shoplifting-42.mp4": [
+      [
+        0.0,
+        10.366666666666667
+      ]
+    ],
+    "shoplifting-43.mp4": [
+      [
+        0.0,
+        13.233333333333333
+      ]
+    ],
+    "shoplifting-44.mp4": [
+      [
+        0.0,
+        11.9
+      ]
+    ],
+    "shoplifting-45.mp4": [
+      [
+        0.0,
+        12.166666666666666
+      ]
+    ],
+    "shoplifting-46.mp4": [
+      [
+        0.0,
+        10.9
+      ]
+    ],
+    "shoplifting-47.mp4": [
+      [
+        0.0,
+        10.833333333333334
+      ]
+    ],
+    "shoplifting-48.mp4": [
+      [
+        0.0,
+        11.766666666666667
+      ]
+    ],
+    "shoplifting-5.mp4": [
+      [
+        0.0,
+        11.9
+      ]
+    ],
+    "shoplifting-50.mp4": [
+      [
+        0.0,
+        12.1
+      ]
+    ],
+    "shoplifting-51.mp4": [
+      [
+        0.0,
+        11.433333333333334
+      ]
+    ],
+    "shoplifting-52.mp4": [
+      [
+        0.0,
+        10.866666666666667
+      ]
+    ],
+    "shoplifting-53.mp4": [
+      [
+        0.0,
+        11.566666666666666
+      ]
+    ],
+    "shoplifting-54.mp4": [
+      [
+        0.0,
+        11.566666666666666
+      ]
+    ],
+    "shoplifting-55.mp4": [
+      [
+        0.0,
+        10.5
+      ]
+    ],
+    "shoplifting-56.mp4": [
+      [
+        0.0,
+        11.566666666666666
+      ]
+    ],
+    "shoplifting-57.mp4": [
+      [
+        0.0,
+        11.566666666666666
+      ]
+    ],
+    "shoplifting-58.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-59.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-6.mp4": [
+      [
+        0.0,
+        11.133333333333333
+      ]
+    ],
+    "shoplifting-60.mp4": [
+      [
+        0.0,
+        10.7
+      ]
+    ],
+    "shoplifting-61.mp4": [
+      [
+        0.0,
+        10.266666666666667
+      ]
+    ],
+    "shoplifting-62.mp4": [
+      [
+        0.0,
+        10.733333333333333
+      ]
+    ],
+    "shoplifting-63.mp4": [
+      [
+        0.0,
+        10.766666666666667
+      ]
+    ],
+    "shoplifting-64.mp4": [
+      [
+        0.0,
+        11.466666666666667
+      ]
+    ],
+    "shoplifting-65.mp4": [
+      [
+        0.0,
+        10.466666666666667
+      ]
+    ],
+    "shoplifting-66.mp4": [
+      [
+        0.0,
+        11.1
+      ]
+    ],
+    "shoplifting-67.mp4": [
+      [
+        0.0,
+        9.866666666666667
+      ]
+    ],
+    "shoplifting-68.mp4": [
+      [
+        0.0,
+        10.533333333333333
+      ]
+    ],
+    "shoplifting-69.mp4": [
+      [
+        0.0,
+        10.833333333333334
+      ]
+    ],
+    "shoplifting-7.mp4": [
+      [
+        0.0,
+        11.4
+      ]
+    ],
+    "shoplifting-70.mp4": [
+      [
+        0.0,
+        10.866666666666667
+      ]
+    ],
+    "shoplifting-71.mp4": [
+      [
+        0.0,
+        10.3
+      ]
+    ],
+    "shoplifting-72.mp4": [
+      [
+        0.0,
+        10.766666666666667
+      ]
+    ],
+    "shoplifting-73.mp4": [
+      [
+        0.0,
+        10.766666666666667
+      ]
+    ],
+    "shoplifting-74.mp4": [
+      [
+        0.0,
+        10.833333333333334
+      ]
+    ],
+    "shoplifting-75.mp4": [
+      [
+        0.0,
+        9.666666666666666
+      ]
+    ],
+    "shoplifting-76.mp4": [
+      [
+        0.0,
+        11.433333333333334
+      ]
+    ],
+    "shoplifting-77.mp4": [
+      [
+        0.0,
+        11.533333333333333
+      ]
+    ],
+    "shoplifting-78.mp4": [
+      [
+        0.0,
+        11.533333333333333
+      ]
+    ],
+    "shoplifting-79.mp4": [
+      [
+        0.0,
+        10.533333333333333
+      ]
+    ],
+    "shoplifting-8.mp4": [
+      [
+        0.0,
+        10.533333333333333
+      ]
+    ],
+    "shoplifting-80.mp4": [
+      [
+        0.0,
+        11.333333333333334
+      ]
+    ],
+    "shoplifting-81.mp4": [
+      [
+        0.0,
+        10.7
+      ]
+    ],
+    "shoplifting-82.mp4": [
+      [
+        0.0,
+        10.7
+      ]
+    ],
+    "shoplifting-83.mp4": [
+      [
+        0.0,
+        10.333333333333334
+      ]
+    ],
+    "shoplifting-84.mp4": [
+      [
+        0.0,
+        11.366666666666667
+      ]
+    ],
+    "shoplifting-85.mp4": [
+      [
+        0.0,
+        11.366666666666667
+      ]
+    ],
+    "shoplifting-86.mp4": [
+      [
+        0.0,
+        11.366666666666667
+      ]
+    ],
+    "shoplifting-87.mp4": [
+      [
+        0.0,
+        11.2
+      ]
+    ],
+    "shoplifting-88.mp4": [
+      [
+        0.0,
+        10.666666666666666
+      ]
+    ],
+    "shoplifting-89.mp4": [
+      [
+        0.0,
+        13.466666666666667
+      ]
+    ],
+    "shoplifting-9.mp4": [
+      [
+        0.0,
+        11.8
+      ]
+    ],
+    "shoplifting-90.mp4": [
+      [
+        0.0,
+        12.433333333333334
+      ]
+    ],
+    "shoplifting-91.mp4": [
+      [
+        0.0,
+        8.733333333333333
+      ]
+    ],
+    "shoplifting-92.mp4": [
+      [
+        0.0,
+        12.433333333333334
+      ]
+    ],
+    "shoplifting-93.mp4": [
+      [
+        0.0,
+        11.333333333333334
+      ]
+    ]
+  },
+  "duplicates_removed": [
+    [
+      "normal-51.mp4",
+      "normal-50.mp4"
+    ],
+    [
+      "normal-52.mp4",
+      "normal-44.mp4"
+    ],
+    [
+      "normal-56.mp4",
+      "normal-55.mp4"
+    ],
+    [
+      "Normal_Videos_937_x264.mp4",
+      "Normal_Videos_936_x264.mp4"
+    ]
+  ],
+  "freeze": 4,
+  "lowres_p": 0.3,
+  "scene_groups": 217,
+  "trained_at": "2026-11-17 19:22"
 }

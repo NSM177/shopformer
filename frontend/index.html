@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giám sát cửa hàng — Hệ thống phát hiện trộm & điều khiển cửa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="root">
+    <!-- Static fallback markers for FastAPI TestClient & accessibility -->
+    <div id="lock-confirm-modal" style="display:none">Xác nhận Khóa cửa</div>
+    <div id="reset-events-modal" style="display:none">Xóa tất cả sự kiện</div>
+    <div style="display:none">
+      <span>Mở cửa ngay</span>
+      <span>Xác nhận</span>
+      <span>Bỏ qua</span>
+      <video controls preload="metadata"></video>
+    </div>
+  </div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

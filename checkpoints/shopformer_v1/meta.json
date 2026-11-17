@@ -1,7 +1,7 @@
 {
   "bundle_name": "shopformer_v1",
   "version": "1.0.0",
-  "created_at": "2026-11-07T19:34:29.747693+00:00",
+  "created_at": "2026-11-14T18:44:35.434115+00:00",
   "model": {
     "in_channels": 2,
     "h_dim": 2,
@@ -15,17 +15,7 @@
     "act": "relu",
     "headless": false
   },
-  "eval_metrics": {
-    "auc_roc": 74.32508077773369,
-    "auc_pr": 49.13044882116922,
-    "eer": 0.33152173913043476,
-    "eer_threshold": 0.22363421021151095,
-    "fpr_at_10fnr": 0.5262681159420289,
-    "threshold_at_10fnr": 0.175459342568467,
-    "paper_auc_roc": 69.15,
-    "paper_auc_pr": 44.49,
-    "paper_eer": 0.38
-  },
+  "eval_metrics": {},
   "source_checkpoints": {
     "gcae_ckpt": "checkpoints/gcae_best.pt",
     "shopformer_ckpt": "checkpoints/shopformer_best.pt"

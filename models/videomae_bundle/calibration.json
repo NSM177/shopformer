@@ -1,26 +1,7 @@
 {
-    "threshold": 0.5862888097763062,
-    "mode": "f1",
-    "operating_points_test": {
-        "0.300": {
-            "tpr": 0.88,
-            "fpr": 0.19047619047619047
-        },
-        "0.500": {
-            "tpr": 0.88,
-            "fpr": 0.09523809523809523
-        },
-        "0.700": {
-            "tpr": 0.88,
-            "fpr": 0.09523809523809523
-        },
-        "0.900": {
-            "tpr": 0.64,
-            "fpr": 0.0
-        },
-        "0.586": {
-            "tpr": 0.88,
-            "fpr": 0.09523809523809523
-        }
-    }
+  "threshold": 0.75,
+  "smooth_windows": 2,
+  "consecutive_k": 2,
+  "max_fa_per_min_target": 0.2,
+  "note": "\u0110i\u1ec3m = trung b\u00ecnh smooth c\u1eeda s\u1ed5 g\u1ea7n nh\u1ea5t c\u1ee7a M\u1ed8T track; b\u00e1o khi v\u01b0\u1ee3t ng\u01b0\u1ee1ng k l\u1ea7n li\u00ean ti\u1ebfp."
 }
